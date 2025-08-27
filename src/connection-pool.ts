@@ -7,7 +7,7 @@
 
 import { WebSocket } from 'ws';
 import { EventEmitter } from 'events';
-import { nowTs } from '@vapi/types';
+import { nowTs } from './types';
 
 export interface ConnectionMetrics {
   totalConnections: number;

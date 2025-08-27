@@ -5,13 +5,9 @@
     "dockerfilePath": "./Dockerfile"
   },
   "deploy": {
-    "port": 4010,
-    "healthcheckPath": "/health",
-    "healthcheckTimeout": 100,
+    "healthcheckPath": "/healthz",
+    "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 3,
-    "environmentVariables": {
-      "NODE_ENV": "production"
-    }
+    "restartPolicyMaxRetries": 5
   }
 }

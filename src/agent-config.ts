@@ -42,7 +42,7 @@ export interface AgentConfig {
 
 function loadServerConfig(): AgentServerConfig {
   return {
-    port: Number(process.env.AGENT_WS_PORT || 4010),
+    port: Number(process.env.PORT || process.env.AGENT_WS_PORT || 4010),
     logLevel: process.env.LOG_LEVEL || 'info',
     testHooksEnabled: String(process.env.TEST_HOOKS_ENABLED || 'false') === 'true'
   };

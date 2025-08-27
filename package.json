@@ -1,0 +1,32 @@
+{
+  "name": "woic-agent-server",
+  "version": "1.0.0",
+  "description": "WebSocket agent server for voice interactions",
+  "main": "dist/agent-server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/agent-server.js",
+    "dev": "ts-node src/agent-server.ts",
+    "test": "echo \"No tests yet\""
+  },
+  "dependencies": {
+    "@deepgram/sdk": "^3.10.0",
+    "@types/ws": "^8.5.13",
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "elevenlabs": "^1.0.6",
+    "livekit-server-sdk": "^2.9.2",
+    "openai": "^4.77.0",
+    "uuid": "^11.0.5",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "@types/uuid": "^10.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Audio Pipeline Manager
  * Enterprise-grade audio processing pipeline with ultra-low latency

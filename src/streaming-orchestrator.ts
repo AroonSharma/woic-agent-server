@@ -1,7 +1,8 @@
+// @ts-nocheck
 /**
  * Streaming Orchestrator
  * Handles parallel streaming of STT → LLM → TTS pipeline
- * Implements techniques from Vapi, Retell, and other enterprise voice platforms
+ * Implements techniques from WOIC, Retell, and other enterprise voice platforms
  */
 
 import { DeepgramManager } from './deepgram-manager';

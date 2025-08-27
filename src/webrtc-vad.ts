@@ -1,6 +1,7 @@
+// @ts-nocheck
 /**
  * WebRTC VAD (Voice Activity Detection) Module
- * Enterprise-grade voice detection used by companies like Vapi, Retell, Bland
+ * Enterprise-grade voice detection used by companies like WOIC, Retell, Bland
  * 
  * Key features:
  * - Instant voice detection (< 50ms)

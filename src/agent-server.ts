@@ -100,7 +100,35 @@ type SessionState = {
   // future: deepgram/openai/elevenlabs connections, abort controllers, queues
 };
 
-const wss = new WebSocketServer({ port: PORT, path: '/agent' });
+// Create HTTP server that handles both HTTP and WebSocket requests
+const server = http.createServer((req, res) => {
+  if (!req.url) { res.statusCode = 400; return res.end('Bad Request'); }
+  
+  if (req.url === '/healthz') {
+    res.setHeader('Content-Type', 'application/json');
+    return res.end(JSON.stringify({ status: 'healthy', timestamp: new Date().toISOString() }));
+  }
+  
+  if (req.url === '/metrics') {
+    const body = {
+      activeCalls: metrics.activeCalls,
+      retainedConversations: metrics.retainedConversations, 
+      totalMessages: metrics.totalMessages,
+      totalTurns,
+      lastLlmFirstTokenMs,
+      lastTtsFirstAudioMs,
+      lastTurnElapsedMs,
+      ts: Date.now(),
+    };
+    res.setHeader('Content-Type', 'application/json');
+    return res.end(JSON.stringify(body));
+  }
+  
+  // Default response for other paths
+  res.statusCode = 404; 
+  res.end('Not Found');
+});
+
 // Track active sessionIds for live call count
 const activeSessionIds = new Set<string>();
 // Global turn metrics (simple, in-memory)
@@ -108,6 +136,19 @@ let totalTurns = 0;
 let lastLlmFirstTokenMs = -1;
 let lastTtsFirstAudioMs = -1;
 let lastTurnElapsedMs = -1;
+
+// Metrics object
+const metrics = {
+  get activeCalls() { return activeSessionIds.size; },
+  get retainedConversations() {
+    const total = conversationMemory.getStats().totalConversations;
+    const active = activeSessionIds.size;
+    return Math.max(0, total - active);
+  },
+  get totalMessages() { return conversationMemory.getStats().totalMessages; },
+};
+
+const wss = new WebSocketServer({ server, path: '/agent' });
 // Allowed origins for WebSocket connections (comma-separated)
 const allowedOrigins = String(process.env.ALLOWED_ORIGINS || 'http://localhost:3010,http://localhost:3000,http://localhost:5173,http://localhost:5175,http://localhost:5176')
   .split(',')
@@ -1430,67 +1471,10 @@ wss.on('connection', (ws, req) => {
   });
 });
 
-// eslint-disable-next-line no-console
-console.log(`[agent-ws] listening on ws://localhost:${PORT}/agent`);
-
-// Lightweight health/metrics HTTP server on PORT+1
-const metrics = {
-  get activeCalls() { return activeSessionIds.size; },
-  get retainedConversations() {
-    const total = conversationMemory.getStats().totalConversations;
-    const active = activeSessionIds.size;
-    return Math.max(0, total - active);
-  },
-  get totalMessages() { return conversationMemory.getStats().totalMessages; },
-};
-
-const httpPort = (PORT || 4010) + 1;
-const server = http.createServer((req, res) => {
-  if (!req.url) { res.statusCode = 400; return res.end('Bad Request'); }
-  if (req.url === '/healthz') {
-    res.setHeader('Content-Type', 'application/json');
-    return res.end(JSON.stringify({ ok: true }));
-  }
-  if (req.url === '/metrics') {
-    const body = {
-      activeCalls: metrics.activeCalls,
-      retainedConversations: metrics.retainedConversations,
-      totalMessages: metrics.totalMessages,
-      totalTurns,
-      lastLlmFirstTokenMs,
-      lastTtsFirstAudioMs,
-      lastTurnElapsedMs,
-      ts: Date.now(),
-    };
-    res.setHeader('Content-Type', 'application/json');
-    return res.end(JSON.stringify(body));
-  }
-  if (req.url === '/prom') {
-    const lines: string[] = [];
-    lines.push(`# HELP vapi_active_calls Active WebSocket sessions`);
-    lines.push(`# TYPE vapi_active_calls gauge`);
-    lines.push(`vapi_active_calls ${metrics.activeCalls}`);
-    lines.push(`# HELP vapi_total_turns Total turns processed`);
-    lines.push(`# TYPE vapi_total_turns counter`);
-    lines.push(`vapi_total_turns ${totalTurns}`);
-    if (lastLlmFirstTokenMs >= 0) {
-      lines.push(`# HELP vapi_last_llm_first_token_ms Last LLM first token latency`);
-      lines.push(`# TYPE vapi_last_llm_first_token_ms gauge`);
-      lines.push(`vapi_last_llm_first_token_ms ${lastLlmFirstTokenMs}`);
-    }
-    if (lastTtsFirstAudioMs >= 0) {
-      lines.push(`# HELP vapi_last_tts_first_audio_ms Last TTS first audio latency`);
-      lines.push(`# TYPE vapi_last_tts_first_audio_ms gauge`);
-      lines.push(`vapi_last_tts_first_audio_ms ${lastTtsFirstAudioMs}`);
-    }
-    if (lastTurnElapsedMs >= 0) {
-      lines.push(`# HELP vapi_last_turn_elapsed_ms Last end-to-end turn duration`);
-      lines.push(`# TYPE vapi_last_turn_elapsed_ms gauge`);
-      lines.push(`vapi_last_turn_elapsed_ms ${lastTurnElapsedMs}`);
-    }
-    res.setHeader('Content-Type', 'text/plain; version=0.0.4');
-    return res.end(lines.join('\n'));
-  }
-  res.statusCode = 404; res.end('Not Found');
+// Start the server on the configured PORT
+server.listen(PORT, () => {
+  console.log(`[agent-server] HTTP & WebSocket server listening on port ${PORT}`);
+  console.log(`[agent-server] WebSocket endpoint: ws://localhost:${PORT}/agent`);
+  console.log(`[agent-server] Health check: http://localhost:${PORT}/healthz`);
+  console.log(`[agent-server] Metrics: http://localhost:${PORT}/metrics`);
 });
-server.listen(httpPort, () => console.log(`[agent-http] health/metrics on http://localhost:${httpPort}`));

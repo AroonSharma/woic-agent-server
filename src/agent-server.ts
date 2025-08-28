@@ -177,7 +177,7 @@ wss.on('connection', (ws, req) => {
       const headerToken = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length) : '';
       let queryToken = '';
       try {
-        const parsed = new URL(req.url || '', 'http://localhost');
+        const parsed = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
         queryToken = parsed.searchParams.get('token') || parsed.searchParams.get('access_token') || '';
       } catch (e: unknown) {
         console.error('[agent] Failed to parse URL for token extraction:', e instanceof Error ? e.message : String(e));
@@ -1471,10 +1471,12 @@ wss.on('connection', (ws, req) => {
   });
 });
 
-// Start the server on the configured PORT
-server.listen(PORT, () => {
-  console.log(`[agent-server] HTTP & WebSocket server listening on port ${PORT}`);
-  console.log(`[agent-server] WebSocket endpoint: ws://localhost:${PORT}/agent`);
-  console.log(`[agent-server] Health check: http://localhost:${PORT}/healthz`);
-  console.log(`[agent-server] Metrics: http://localhost:${PORT}/metrics`);
+// Start the server on the configured PORT - bind to all interfaces for Railway
+const host = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
+server.listen(PORT, host, () => {
+  console.log(`[agent-server] HTTP & WebSocket server listening on ${host}:${PORT}`);
+  console.log(`[agent-server] WebSocket endpoint: ws://${host}:${PORT}/agent`);
+  console.log(`[agent-server] Health check: http://${host}:${PORT}/healthz`);
+  console.log(`[agent-server] Metrics: http://${host}:${PORT}/metrics`);
+  console.log(`[agent-server] Environment: NODE_ENV=${process.env.NODE_ENV}`);
 });

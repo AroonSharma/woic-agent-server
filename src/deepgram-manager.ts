@@ -32,6 +32,7 @@ export class DeepgramManager {
   private sttSilenceTimer: NodeJS.Timeout | null = null;
   private callbacks: DeepgramCallbacks | null = null;
   private sessionContext: any = null;
+  private apiKey: string | null = null;
   // De-duplication state for finals to avoid repeated turns
   private lastEmittedFinalNorm: string | null = null;
   private lastEmittedFinalAt: number = 0;
@@ -98,6 +99,7 @@ export class DeepgramManager {
     dbg('[deepgram] Creating new Deepgram connection...');
     
     const { apiKey: key } = getDeepgramConfig();
+    this.apiKey = key; // Store for error logging
 
     // API KEY VALIDATION LOGGING
     console.log('[deepgram] 🔑 API Key Status:', {
@@ -190,7 +192,7 @@ export class DeepgramManager {
       if (errorMsg.includes('401') || errorMsg.includes('Unauthorized') || errorMsg.includes('invalid api key')) {
         console.error('[deepgram] 🚨🔑 API KEY ERROR DETECTED!');
         console.error('[deepgram] 🚨🔑 This error is likely due to an invalid or expired Deepgram API key');
-        console.error('[deepgram] 🚨🔑 Current key starts with:', key?.substring(0, 8) + '...' || 'NO_KEY');
+        console.error('[deepgram] 🚨🔑 Current key starts with:', this.apiKey?.substring(0, 8) + '...' || 'NO_KEY');
       }
       
       console.error('[deepgram] 🚨 Error details:', {

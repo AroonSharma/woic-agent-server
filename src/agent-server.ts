@@ -1098,9 +1098,8 @@ wss.on('connection', (ws, req) => {
                 session.lastDecodeError = now;
               }
             } else {
-              // No session + decode errors = likely malformed client, terminate quickly
-              console.log('[agent] Failed to decode binary frame - invalid format (no session), terminating connection');
-              ws.terminate();
+              // No session yet - allow some decode errors during connection setup
+              console.log('[agent] Failed to decode binary frame - invalid format (no session yet)');
             }
             return;
           }

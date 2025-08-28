@@ -1072,7 +1072,14 @@ wss.on('connection', (ws, req) => {
           return;
         }
         try {
-          const { header, payload } = decodeBinaryFrame(raw);
+          // TARGETED FIX: Use correct destructuring to match decodeBinaryFrame return type
+          // decodeBinaryFrame returns { type, data } not { header, payload }
+          const decoded = decodeBinaryFrame(raw);
+          if (!decoded) {
+            console.log('[agent] Failed to decode binary frame - invalid format');
+            return;
+          }
+          const { type: header, data: payload } = decoded;
           console.log('[agent] Decoded header:', JSON.stringify(header));
           const parsed = AudioChunkHeaderSchema.safeParse(header);
           if (!parsed.success) {

@@ -837,6 +837,12 @@ wss.on('connection', (ws, req) => {
 
   ws.on('message', async (raw) => {
     try {
+      // Check connection state first - ignore messages if closed/closing
+      if (ws.readyState !== 1) { // 1 = WebSocket.OPEN
+        console.log('[agent] Ignoring message - WebSocket not open, state:', ws.readyState);
+        return;
+      }
+      
       // Update connection activity in pool
       if (connectionId) {
         connectionPool.updateActivity(connectionId);
@@ -1076,11 +1082,34 @@ wss.on('connection', (ws, req) => {
           // decodeBinaryFrame returns { type, data } not { header, payload }
           const decoded = decodeBinaryFrame(raw);
           if (!decoded) {
-            console.log('[agent] Failed to decode binary frame - invalid format');
+            // Rate limit error messages to prevent spam and track failed attempts
+            const now = Date.now();
+            if (session) {
+              session.decodeErrorCount = (session.decodeErrorCount || 0) + 1;
+              // If too many consecutive decode errors, terminate connection
+              if (session.decodeErrorCount > 50) {
+                console.error('[agent] Too many consecutive decode errors, terminating connection');
+                ws.terminate();
+                return;
+              }
+              
+              if (!session.lastDecodeError || (now - session.lastDecodeError) > 5000) {
+                console.log('[agent] Failed to decode binary frame - invalid format (attempt', session.decodeErrorCount, ')');
+                session.lastDecodeError = now;
+              }
+            } else {
+              console.log('[agent] Failed to decode binary frame - invalid format (no session)');
+            }
             return;
           }
           const { type: header, data: payload } = decoded;
           console.log('[agent] Decoded header:', JSON.stringify(header));
+          
+          // Reset error count on successful decode
+          if (session && session.decodeErrorCount) {
+            session.decodeErrorCount = 0;
+          }
+          
           const parsed = AudioChunkHeaderSchema.safeParse(header);
           if (!parsed.success) {
             console.log('[agent] Header validation failed:', parsed.error);

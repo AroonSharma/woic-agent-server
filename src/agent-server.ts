@@ -672,6 +672,7 @@ wss.on('connection', (ws, req) => {
               });
             } catch (e) {
               attempt += 1;
+              console.error('[agent] OpenAI attempt', attempt, 'failed:', e instanceof Error ? e.message : String(e));
               if (attempt >= 2) throw e;
               await new Promise((r) => setTimeout(r, 200));
             }
@@ -754,7 +755,8 @@ wss.on('connection', (ws, req) => {
           if (!ttsStarted) sendTtsEnd('complete');
         }
       } catch (err) {
-        console.error('[agent] OpenAI/TTS error:', err);
+        console.error('[agent] OpenAI/TTS error:', err instanceof Error ? err.message : String(err));
+        console.error('[agent] Error details:', err);
         // Ensure a single tts.end on error
         sendTtsEnd('error');
       }
@@ -768,7 +770,7 @@ wss.on('connection', (ws, req) => {
     isTtsActive = false;
     currentTtsText = '';
     processingTurn = false;
-    const ttsElapsed = Date.now() - ttsStartTime;
+    const ttsElapsed = ttsStartTime > 0 ? Date.now() - ttsStartTime : 0;
     console.log('[agent] TTS ended:', reason, 'after', ttsElapsed, 'ms');
     try {
       // Update global turn metrics and notify client

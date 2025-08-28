@@ -73,16 +73,43 @@ function loadAPIKeysConfig(): APIKeysConfig {
   const elevenlabsApiKey = process.env.ELEVENLABS_API_KEY;
   const defaultVoiceId = process.env.VOICE_ID;
 
+  // API KEYS VALIDATION LOGGING
+  console.log('[agent-config] 🔑 API Keys Status Check:');
+  console.log('[agent-config] 🔑 Deepgram:', {
+    present: !!deepgramApiKey,
+    length: deepgramApiKey?.length || 0,
+    prefix: deepgramApiKey ? deepgramApiKey.substring(0, 8) + '...' : 'MISSING'
+  });
+  console.log('[agent-config] 🔑 OpenAI:', {
+    present: !!openaiApiKey,
+    length: openaiApiKey?.length || 0,
+    prefix: openaiApiKey ? openaiApiKey.substring(0, 8) + '...' : 'MISSING'
+  });
+  console.log('[agent-config] 🔑 ElevenLabs:', {
+    present: !!elevenlabsApiKey,
+    length: elevenlabsApiKey?.length || 0,
+    prefix: elevenlabsApiKey ? elevenlabsApiKey.substring(0, 8) + '...' : 'MISSING'
+  });
+  console.log('[agent-config] 🔑 Voice ID:', {
+    present: !!defaultVoiceId,
+    length: defaultVoiceId?.length || 0,
+    value: defaultVoiceId || 'MISSING'
+  });
+
   if (!deepgramApiKey) {
+    console.error('[agent-config] ❌ DEEPGRAM_API_KEY environment variable is required');
     throw new Error('DEEPGRAM_API_KEY environment variable is required');
   }
   if (!openaiApiKey) {
+    console.error('[agent-config] ❌ OPENAI_API_KEY environment variable is required');
     throw new Error('OPENAI_API_KEY environment variable is required');
   }
   if (!elevenlabsApiKey) {
+    console.error('[agent-config] ❌ ELEVENLABS_API_KEY environment variable is required');
     throw new Error('ELEVENLABS_API_KEY environment variable is required');
   }
   if (!defaultVoiceId) {
+    console.error('[agent-config] ❌ VOICE_ID environment variable is required');
     throw new Error('VOICE_ID environment variable is required');
   }
 

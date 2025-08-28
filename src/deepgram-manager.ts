@@ -99,6 +99,19 @@ export class DeepgramManager {
     
     const { apiKey: key } = getDeepgramConfig();
 
+    // API KEY VALIDATION LOGGING
+    console.log('[deepgram] 🔑 API Key Status:', {
+      hasKey: !!key,
+      keyLength: key ? key.length : 0,
+      keyPrefix: key ? key.substring(0, 8) + '...' : 'NO_KEY',
+      keyFormat: key ? (key.match(/^[a-f0-9]+$/i) ? 'hex' : 'other') : 'none'
+    });
+    
+    if (!key || key.length < 32) {
+      console.error('[deepgram] ❌ INVALID API KEY - Key is missing or too short!');
+      console.error('[deepgram] ❌ Expected: 32+ character hex string, Got:', key?.length || 0, 'chars');
+    }
+
     const url = this.buildWebSocketUrl(opts);
     dbg('[deepgram] Creating WebSocket with URL:', url);
     dbg('[deepgram] Using headers:', { Authorization: `Token ${key.slice(0, 10)}...` });
@@ -171,6 +184,15 @@ export class DeepgramManager {
 
     this.ws.on('error', (e) => {
       console.error('[deepgram] 🚨 WebSocket ERROR:', e);
+      
+      // ENHANCED API KEY ERROR DETECTION
+      const errorMsg = e?.message || String(e);
+      if (errorMsg.includes('401') || errorMsg.includes('Unauthorized') || errorMsg.includes('invalid api key')) {
+        console.error('[deepgram] 🚨🔑 API KEY ERROR DETECTED!');
+        console.error('[deepgram] 🚨🔑 This error is likely due to an invalid or expired Deepgram API key');
+        console.error('[deepgram] 🚨🔑 Current key starts with:', key?.substring(0, 8) + '...' || 'NO_KEY');
+      }
+      
       console.error('[deepgram] 🚨 Error details:', {
         message: e.message,
         code: (e as any).code,

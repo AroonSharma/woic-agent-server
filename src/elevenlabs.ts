@@ -30,7 +30,28 @@ export async function streamElevenLabsTTS(opts: ElevenLabsStreamOptions): Promis
     signal,
   } = opts;
 
+  // API KEY & VOICE ID VALIDATION LOGGING
+  console.log('[elevenlabs] 🔑 API Configuration:', {
+    hasApiKey: !!apiKey,
+    keyLength: apiKey ? apiKey.length : 0,
+    keyPrefix: apiKey ? apiKey.substring(0, 8) + '...' : 'NO_KEY',
+    hasVoiceId: !!voiceId,
+    voiceIdLength: voiceId ? voiceId.length : 0,
+    voiceIdPrefix: voiceId ? voiceId.substring(0, 8) + '...' : 'NO_VOICE_ID'
+  });
+  
+  if (!apiKey || apiKey.length < 20) {
+    console.error('[elevenlabs] ❌ INVALID API KEY - Key is missing or too short!');
+    console.error('[elevenlabs] ❌ Expected: 20+ character string, Got:', apiKey?.length || 0, 'chars');
+  }
+  
+  if (!voiceId || voiceId.length < 10) {
+    console.error('[elevenlabs] ❌ INVALID VOICE ID - Voice ID is missing or too short!');
+    console.error('[elevenlabs] ❌ Expected: 10+ character string, Got:', voiceId?.length || 0, 'chars');
+  }
+
   const url = `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-input?optimize_streaming_latency=${optimizeStreamingLatency}&output_format=${outputFormat}`;
+  console.log('[elevenlabs] 🌐 Connecting to:', url.replace(apiKey, 'API_KEY_HIDDEN'));
 
   let seq = 0;
   let closed = false;
@@ -85,7 +106,22 @@ export async function streamElevenLabsTTS(opts: ElevenLabsStreamOptions): Promis
       } });
     ws.once('open', () => resolve());
     ws.once('error', (e) => {
-      console.log('[elevenlabs] WebSocket error during connect:', e);
+      console.error('[elevenlabs] 🚨 WebSocket error during connect:', e);
+      
+      // ENHANCED API KEY ERROR DETECTION
+      const errorMsg = e?.message || String(e);
+      if (errorMsg.includes('401') || errorMsg.includes('Unauthorized') || errorMsg.includes('invalid api key')) {
+        console.error('[elevenlabs] 🚨🔑 API KEY ERROR DETECTED!');
+        console.error('[elevenlabs] 🚨🔑 This error is likely due to an invalid or expired ElevenLabs API key');
+        console.error('[elevenlabs] 🚨🔑 Current key starts with:', apiKey?.substring(0, 8) + '...' || 'NO_KEY');
+      }
+      
+      if (errorMsg.includes('voice') || errorMsg.includes('not found')) {
+        console.error('[elevenlabs] 🚨🎵 VOICE ID ERROR DETECTED!');
+        console.error('[elevenlabs] 🚨🎵 Voice ID may be invalid or not accessible with this API key');
+        console.error('[elevenlabs] 🚨🎵 Current voice ID:', voiceId || 'NO_VOICE_ID');
+      }
+      
       reject(e);
     });
   });
@@ -158,8 +194,16 @@ export async function streamElevenLabsTTS(opts: ElevenLabsStreamOptions): Promis
     onEnd('complete');
   });
 
-  ws.on('error', () => {
+  ws.on('error', (e) => {
     if (closed) return;
+    console.error('[elevenlabs] 🚨 WebSocket stream error:', e);
+    
+    // ENHANCED API KEY ERROR DETECTION
+    const errorMsg = e?.message || String(e);
+    if (errorMsg.includes('401') || errorMsg.includes('Unauthorized') || errorMsg.includes('invalid api key')) {
+      console.error('[elevenlabs] 🚨🔑 STREAM API KEY ERROR - Invalid or expired ElevenLabs API key!');
+    }
+    
     closed = true;
     reconnect();
   });

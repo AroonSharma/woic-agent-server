@@ -1087,7 +1087,7 @@ wss.on('connection', (ws, req) => {
             if (session) {
               session.decodeErrorCount = (session.decodeErrorCount || 0) + 1;
               // If too many consecutive decode errors, terminate connection
-              if (session.decodeErrorCount > 50) {
+              if (session.decodeErrorCount > 10) {
                 console.error('[agent] Too many consecutive decode errors, terminating connection');
                 ws.terminate();
                 return;
@@ -1098,7 +1098,9 @@ wss.on('connection', (ws, req) => {
                 session.lastDecodeError = now;
               }
             } else {
-              console.log('[agent] Failed to decode binary frame - invalid format (no session)');
+              // No session + decode errors = likely malformed client, terminate quickly
+              console.log('[agent] Failed to decode binary frame - invalid format (no session), terminating connection');
+              ws.terminate();
             }
             return;
           }

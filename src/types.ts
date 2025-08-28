@@ -238,8 +238,26 @@ export function encodeBinaryFrame(type: string, data: Buffer): Buffer {
 export function decodeBinaryFrame(frame: Buffer): { type: string; data: Buffer } | null {
   if (frame.length < 4) return null;
   const typeLength = frame.readUInt32LE(0);
-  if (frame.length < 4 + typeLength) return null;
+  
+  // Validate type length is reasonable (prevent malformed frames)
+  if (typeLength > 1000 || typeLength < 1) {
+    console.error('[decodeBinaryFrame] Invalid type length:', typeLength);
+    return null;
+  }
+  
+  if (frame.length < 4 + typeLength) {
+    console.error('[decodeBinaryFrame] Frame too short for declared type length:', frame.length, 'vs expected:', 4 + typeLength);
+    return null;
+  }
+  
   const type = frame.subarray(4, 4 + typeLength).toString('utf8');
+  
+  // Check if type looks like JSON (malformed client)
+  if (type.startsWith('{') || type.startsWith('[')) {
+    console.error('[decodeBinaryFrame] Type field contains JSON, expected simple string:', type.substring(0, 50) + '...');
+    return null;
+  }
+  
   const data = frame.subarray(4 + typeLength);
   return { type, data };
 }

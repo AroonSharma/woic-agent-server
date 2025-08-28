@@ -1086,51 +1086,32 @@ wss.on('connection', (ws, req) => {
           console.error('[agent] Frame too large:', raw.length, 'bytes >', MAX_FRAME_BYTES);
           return sendError(ws, session?.sessionId ?? 'unknown', session?.turnId ?? 'unknown', 'payload_too_large', `Frame exceeds ${MAX_FRAME_BYTES} bytes`);
         }
+        // CRITICAL FIX: Handle client sending full JSON header instead of just type string
+        // The client sends: [4 bytes length][JSON header][payload]
         const headerLen = raw.readUInt32BE(0);
-        console.log('[agent] Header length:', headerLen, 'total frame length:', raw.length, 'expected min length:', 4 + headerLen);
+        console.log('[agent] Binary frame header length:', headerLen, 'total frame length:', raw.length);
+        
         if (raw.length < 4 + headerLen) {
           console.error('[agent] Invalid frame: header length', headerLen, 'but total frame length', raw.length);
+          errorCount++;
+          if (errorCount > MAX_ERRORS) {
+            console.log('[agent] Too many decode errors, closing connection');
+            ws.close(1008, 'too many decode errors');
+          }
           return;
         }
+        
+        let header: any;
+        let payload: Buffer;
         try {
-          // TARGETED FIX: Use correct destructuring to match decodeBinaryFrame return type
-          // decodeBinaryFrame returns { type, data } not { header, payload }
-          const decoded = decodeBinaryFrame(raw);
-          if (!decoded) {
-            // Rate limit error messages to prevent spam and track failed attempts
-            const now = Date.now();
-            if (session) {
-              session.decodeErrorCount = (session.decodeErrorCount || 0) + 1;
-              // If too many consecutive decode errors, terminate connection
-              if (session.decodeErrorCount > 10) {
-                console.error('[agent] Too many consecutive decode errors, terminating connection');
-                ws.terminate();
-                return;
-              }
-              
-              if (!session.lastDecodeError || (now - session.lastDecodeError) > 5000) {
-                console.log('[agent] Failed to decode binary frame - invalid format (attempt', session.decodeErrorCount, ')');
-                session.lastDecodeError = now;
-              }
-            } else {
-              // No session yet - track errors and terminate if too many
-              errorCount++;
-              console.log('[agent] Failed to decode binary frame - invalid format (no session yet), error count:', errorCount);
-              if (errorCount > MAX_ERRORS) {
-                console.log('[agent] Too many errors without session, terminating connection safely');
-                ws.close(1008, 'too many decode errors');
-                return;
-              }
-            }
-            return;
-          }
-          const { type: header, data: payload } = decoded;
+          const headerJson = raw.subarray(4, 4 + headerLen).toString('utf8');
+          console.log('[agent] Raw header JSON:', headerJson.substring(0, 100));
+          header = JSON.parse(headerJson);
+          payload = raw.subarray(4 + headerLen);
           console.log('[agent] Decoded header:', JSON.stringify(header));
           
           // Reset error count on successful decode
-          if (session && session.decodeErrorCount) {
-            session.decodeErrorCount = 0;
-          }
+          errorCount = 0;
           
           const parsed = AudioChunkHeaderSchema.safeParse(header);
           if (!parsed.success) {
@@ -1138,7 +1119,7 @@ wss.on('connection', (ws, req) => {
             return; // ignore unknown binary
           }
           console.log('[agent] Header validation SUCCESS, processing audio chunk seq:', parsed.data.seq);
-        log('audio.chunk', parsed.data.seq);
+          log('audio.chunk', parsed.data.seq);
           // Token-bucket rate limiting per connection for audio frames
           if (framesBudget <= 0) {
             console.log('[agent] Rate limit exceeded for audio frames; dropping frame seq:', parsed.data.seq);

@@ -140,18 +140,30 @@ export async function streamElevenLabsTTS(opts: ElevenLabsStreamOptions): Promis
   sendJson({ end_of_stream: true });
 
   ws.on('message', (data) => {
-    // ElevenLabs sends JSON wrapped in a Buffer, need to convert and parse
-    let messageStr: string;
+    // ElevenLabs sends different data types, handle them properly
+    let message: any;
     
-    if (Buffer.isBuffer(data)) {
-      // Convert buffer to string (it contains JSON)
-      messageStr = data.toString('utf8');
-    } else {
-      messageStr = String(data);
+    try {
+      if (Buffer.isBuffer(data)) {
+        // Convert buffer to string (it contains JSON)
+        const messageStr = data.toString('utf8');
+        message = JSON.parse(messageStr);
+      } else if (typeof data === 'string') {
+        message = JSON.parse(data);
+      } else if (typeof data === 'object' && data !== null) {
+        // Already parsed object from WebSocket
+        message = data;
+      } else {
+        console.error('[elevenlabs] Unexpected data type:', typeof data);
+        return;
+      }
+    } catch (parseError) {
+      console.error('[elevenlabs] Failed to parse message:', parseError);
+      console.error('[elevenlabs] Data type:', typeof data, 'Data:', data);
+      return;
     }
     
     try {
-      const message = JSON.parse(messageStr);
       
       if (message.audio) {
         const audioBuffer = Buffer.from(message.audio, 'base64');
@@ -178,8 +190,8 @@ export async function streamElevenLabsTTS(opts: ElevenLabsStreamOptions): Promis
 
       dbg('[elevenlabs] Other message:', message);
     } catch (e) {
-      console.error('[elevenlabs] Failed to parse message:', e);
-      dbg('[elevenlabs] Raw data preview:', messageStr.slice(0, 100));
+      console.error('[elevenlabs] Error processing message:', e);
+      dbg('[elevenlabs] Message:', message);
     }
   });
 

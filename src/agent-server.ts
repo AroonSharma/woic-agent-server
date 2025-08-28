@@ -1161,7 +1161,9 @@ wss.on('connection', (ws, req) => {
 
       switch (base.data.type) {
         case 'session.start': {
+          console.log('[agent] Processing session.start message');
           const s = SessionStartSchema.parse(msg);
+          console.log('[agent] Session data:', { sessionId: s.sessionId, turnId: s.turnId, hasSystemPrompt: !!s.data.systemPrompt, firstMessageMode: (s.data as any).firstMessageMode });
       // Validate optional session JWT if configured
       try {
         const secret = process.env.SESSION_JWT_SECRET;
@@ -1258,20 +1260,28 @@ wss.on('connection', (ws, req) => {
             session.firstMessageMode = (s.data as any).firstMessageMode || session.firstMessageMode || 'assistant_speaks_first';
             session.language = (s.data as any).language || session.language || 'en';
           }
+          console.log('[agent] Session created/updated:', { sessionId: session.sessionId, firstMessageMode: session.firstMessageMode, greeted, language: session.language });
           log('session.start', session);
           // emit a metrics.update to confirm
           sendJson(ws, { type: 'metrics.update', ts: nowTs(), sessionId: session.sessionId, turnId: session.turnId, data: { alive: true } });
+          console.log('[agent] Sent metrics.update');
+          
           // Proactively start Deepgram connection to avoid first-chunk race
           try {
             if (!deepgramManager.isConnected()) {
+              console.log('[agent] Creating Deepgram connection');
               createDeepgramConnection({ encoding: 'linear16', sampleRate: 16000, channels: 1 });
             }
           } catch (e: unknown) {
-        console.error('[error] Unexpected error:', e instanceof Error ? e.message : String(e));
-      }
+            console.error('[agent] Failed to create Deepgram connection:', e instanceof Error ? e.message : String(e));
+          }
+          
           if (!greeted && session.firstMessageMode === 'assistant_speaks_first') {
+            console.log('[agent] Starting greeting with processOpenAIAndTTS');
             greeted = true;
             processOpenAIAndTTS('<__START__>');
+          } else {
+            console.log('[agent] Not greeting:', { greeted, firstMessageMode: session.firstMessageMode });
           }
           return;
         }

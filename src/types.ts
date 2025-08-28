@@ -121,16 +121,21 @@ export const SessionStartSchema = z.object({
   type: z.literal('session.start'),
   sessionId: z.string(),
   turnId: z.string(),
+  ts: z.number(),  // Changed from 'timestamp' to 'ts' to match client
   agentId: z.string().optional(),
   userId: z.string().optional(),
-  timestamp: z.number(),
   data: z.object({
     agentId: z.string().optional(),
     userId: z.string().optional(),
     jwt: z.string().optional(),
+    token: z.string().optional(),  // Added token field
     knowledgeBase: z.any().optional(),
     systemPrompt: z.string().optional(),
     voiceId: z.string().optional(),
+    vadEnabled: z.boolean().optional(),
+    pttMode: z.boolean().optional(),
+    firstMessageMode: z.string().optional(),
+    language: z.string().optional(),
     endpointing: z.any().optional()
   })
 });
@@ -138,47 +143,52 @@ export const SessionStartSchema = z.object({
 export const STTPartialSchema = z.object({
   type: z.literal('stt.partial'),
   text: z.string(),
-  timestamp: z.number()
+  ts: z.number()  // Changed to ts
 });
 
 export const STTFinalSchema = z.object({
   type: z.literal('stt.final'),
   text: z.string(),
-  timestamp: z.number()
+  ts: z.number()  // Changed to ts
 });
 
 export const TestUtteranceSchema = z.object({
   type: z.literal('test.utterance'),
   text: z.string(),
-  timestamp: z.number()
+  ts: z.number(),  // Changed to ts
+  sessionId: z.string(),
+  turnId: z.string(),
+  data: z.object({
+    text: z.string()
+  })
 });
 
 export const LLMPartialSchema = z.object({
   type: z.literal('llm.partial'),
   text: z.string(),
-  timestamp: z.number()
+  ts: z.number()
 });
 
 export const LLMFinalSchema = z.object({
   type: z.literal('llm.final'),
   text: z.string(),
-  timestamp: z.number()
+  ts: z.number()
 });
 
 export const TTSEndSchema = z.object({
   type: z.literal('tts.end'),
   reason: z.enum(['complete', 'barge', 'error']),
-  timestamp: z.number()
+  ts: z.number()
 });
 
 export const AudioEndSchema = z.object({
   type: z.literal('audio.end'),
-  timestamp: z.number()
+  ts: z.number()
 });
 
 export const BargeCancelSchema = z.object({
   type: z.literal('barge.cancel'),
-  timestamp: z.number()
+  ts: z.number()
 });
 
 export const MetricsUpdateSchema = z.object({
@@ -188,26 +198,34 @@ export const MetricsUpdateSchema = z.object({
     totalTurns: z.number(),
     lastLatencyMs: z.number()
   }),
-  timestamp: z.number()
+  ts: z.number()
 });
 
 export const ErrorSchema = z.object({
   type: z.literal('error'),
   message: z.string(),
   code: z.string().optional(),
-  timestamp: z.number()
+  ts: z.number()
 });
 
 export const AudioChunkHeaderSchema = z.object({
   type: z.literal('audio.chunk'),
-  sequence: z.number(),
-  timestamp: z.number()
+  ts: z.number(),
+  sessionId: z.string(),
+  turnId: z.string(),
+  seq: z.number(),
+  codec: z.string(),
+  sampleRate: z.number(),
+  channels: z.number()
 });
 
 export const TTSChunkHeaderSchema = z.object({
   type: z.literal('tts.chunk'),
-  sequence: z.number(),
-  timestamp: z.number()
+  ts: z.number(),
+  sessionId: z.string(),
+  turnId: z.string(),
+  seq: z.number(),
+  mime: z.string()
 });
 
 export const EnvelopeSchema = z.discriminatedUnion('type', [

@@ -166,10 +166,30 @@ export async function streamElevenLabsTTS(opts: ElevenLabsStreamOptions): Promis
     try {
       
       if (message.audio) {
-        const audioBuffer = Buffer.from(message.audio, 'base64');
-        dbg('[elevenlabs] Decoded audio chunk:', audioBuffer.length, 'bytes');
-        onChunk(audioBuffer, seq++);
-        return;
+        try {
+          let audioBuffer: Buffer;
+          if (typeof message.audio === 'string') {
+            // Base64 string - decode it
+            audioBuffer = Buffer.from(message.audio, 'base64');
+          } else if (Buffer.isBuffer(message.audio)) {
+            // Already a buffer
+            audioBuffer = message.audio;
+          } else if (message.audio instanceof Uint8Array) {
+            // Uint8Array - convert to buffer
+            audioBuffer = Buffer.from(message.audio);
+          } else {
+            console.error('[elevenlabs] Unexpected audio data type:', typeof message.audio);
+            return;
+          }
+          
+          dbg('[elevenlabs] Decoded audio chunk:', audioBuffer.length, 'bytes');
+          onChunk(audioBuffer, seq++);
+          return;
+        } catch (audioError) {
+          console.error('[elevenlabs] Failed to process audio data:', audioError);
+          console.error('[elevenlabs] Audio data type:', typeof message.audio);
+          return;
+        }
       }
 
       // Handle terminal states and errors explicitly

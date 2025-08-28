@@ -765,6 +765,7 @@ wss.on('connection', (ws, req) => {
             onChunk: (chunk) => {
               if (ttsFirstAudioMs < 0) { ttsFirstAudioMs = Date.now() - turnStartTs; connTtsFirstAudioMs = ttsFirstAudioMs; logMetrics('tts.first'); sendJson(ws, { type: 'metrics.update', ts: nowTs(), sessionId: session?.sessionId ?? 'unknown', turnId: session?.turnId ?? 'unknown', data: { ttsFirstAudioMs } }); }
               const header = { type: 'tts.chunk', ts: nowTs(), sessionId: session?.sessionId ?? 'unknown', turnId: session?.turnId ?? 'unknown', seq: seq++, mime: 'audio/mpeg' };
+              console.log('[agent] Sending TTS chunk seq:', seq - 1, 'size:', chunk.length, 'bytes');
               ws.send(encodeBinaryFrame(header, chunk));
             },
             onEnd: (reason) => { sendTtsEnd(reason); },

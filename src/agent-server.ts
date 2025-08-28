@@ -225,6 +225,12 @@ wss.on('connection', (ws, req) => {
   let alive = true;
   let openaiAbort: AbortController | null = null;
   let ttsAbort: AbortController | null = null;
+  let connectionStartTime = Date.now();
+  let lastActivityTime = Date.now();
+  let errorCount = 0;
+  const MAX_ERRORS = 10;
+  const MAX_CONNECTION_TIME = 30 * 60 * 1000; // 30 minutes
+  const MAX_IDLE_TIME = 5 * 60 * 1000; // 5 minutes idle
   const deepgramManager = new DeepgramManager();
   const intentAnalyzer = new IntentAnalyzer();
   // Simple per-connection token bucket for audio rate limiting
@@ -843,9 +849,18 @@ wss.on('connection', (ws, req) => {
         return;
       }
       
-      // Update connection activity in pool
+      // Update connection activity in pool and track last activity
+      lastActivityTime = Date.now();
       if (connectionId) {
         connectionPool.updateActivity(connectionId);
+      }
+      
+      // Safety check: terminate very old connections
+      const connectionAge = Date.now() - connectionStartTime;
+      if (connectionAge > MAX_CONNECTION_TIME) {
+        console.log('[agent] Terminating connection due to max age:', connectionAge, 'ms');
+        ws.close(1000, 'connection timeout');
+        return;
       }
       
       console.log('[agent] Received message type:', typeof raw, 'isBuffer:', Buffer.isBuffer(raw), 'length:', Buffer.isBuffer(raw) ? raw.length : 'N/A');
@@ -1098,8 +1113,14 @@ wss.on('connection', (ws, req) => {
                 session.lastDecodeError = now;
               }
             } else {
-              // No session yet - allow some decode errors during connection setup
-              console.log('[agent] Failed to decode binary frame - invalid format (no session yet)');
+              // No session yet - track errors and terminate if too many
+              errorCount++;
+              console.log('[agent] Failed to decode binary frame - invalid format (no session yet), error count:', errorCount);
+              if (errorCount > MAX_ERRORS) {
+                console.log('[agent] Too many errors without session, terminating connection safely');
+                ws.close(1008, 'too many decode errors');
+                return;
+              }
             }
             return;
           }
@@ -1469,9 +1490,38 @@ wss.on('connection', (ws, req) => {
     }
   });
 
-  // Connection pool handles heartbeat, but we still send periodic metrics
+  // Connection pool handles heartbeat, but we still send periodic metrics and check for leaks
   const metricsInterval = setInterval(() => {
     if (ws.readyState === WebSocket.OPEN) {
+      // Check for idle connections
+      const idleTime = Date.now() - lastActivityTime;
+      if (idleTime > MAX_IDLE_TIME) {
+        console.log('[agent] Closing idle connection after', idleTime, 'ms of inactivity');
+        ws.close(1000, 'idle timeout');
+        return;
+      }
+      
+      // Reset error count periodically if connection is healthy
+      if (errorCount > 0 && idleTime < 10000) { // Reset if active within 10s
+        errorCount = 0;
+      }
+      
+      // Emergency cleanup: abort any long-running operations
+      if (isTtsActive && (Date.now() - ttsStartTime) > 60000) { // 1 minute max TTS
+        console.log('[agent] Emergency: Aborting long-running TTS operation');
+        try { ttsAbort?.abort(); } catch {}
+        isTtsActive = false;
+        sendTtsEnd('error');
+      }
+      
+      if (processingTurn && (Date.now() - connTurnStartTs) > 30000) { // 30 seconds max turn
+        console.log('[agent] Emergency: Aborting long-running turn processing');
+        try { openaiAbort?.abort(); } catch {}
+        try { ttsAbort?.abort(); } catch {}
+        processingTurn = false;
+        isTtsActive = false;
+      }
+      
       sendJson(ws, { type: 'metrics.update', ts: nowTs(), sessionId: session?.sessionId ?? 'unknown', turnId: session?.turnId ?? 'unknown', data: { alive: true } });
     } else {
       clearInterval(metricsInterval);

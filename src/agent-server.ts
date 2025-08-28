@@ -150,7 +150,7 @@ const metrics = {
 
 const wss = new WebSocketServer({ server, path: '/agent' });
 // Allowed origins for WebSocket connections (comma-separated)
-const allowedOrigins = String(process.env.ALLOWED_ORIGINS || 'http://localhost:3010,http://localhost:3000,http://localhost:5173,http://localhost:5175,http://localhost:5176')
+const allowedOrigins = String(process.env.ALLOWED_ORIGINS || 'http://localhost:3010,http://localhost:3000,http://localhost:5173,http://localhost:5175,http://localhost:5176,https://woic.app,https://woic.realmonkey.ai')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);

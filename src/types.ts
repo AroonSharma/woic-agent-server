@@ -231,13 +231,13 @@ export const EnvelopeSchema = z.discriminatedUnion('type', [
 export function encodeBinaryFrame(type: string, data: Buffer): Buffer {
   const typeBytes = Buffer.from(type, 'utf8');
   const header = Buffer.alloc(4);
-  header.writeUInt32LE(typeBytes.length, 0);
+  header.writeUInt32BE(typeBytes.length, 0);
   return Buffer.concat([header, typeBytes, data]);
 }
 
 export function decodeBinaryFrame(frame: Buffer): { type: string; data: Buffer } | null {
   if (frame.length < 4) return null;
-  const typeLength = frame.readUInt32LE(0);
+  const typeLength = frame.readUInt32BE(0);
   
   // Validate type length is reasonable (prevent malformed frames)
   if (typeLength > 1000 || typeLength < 1) {

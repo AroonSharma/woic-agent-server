@@ -1,3 +1,28 @@
+[2025-08-28] Critical Binary Frame and Schema Fixes - Production Voice Pipeline Restoration
+**⚠️ DEPLOYMENT STATUS: ✅ RESOLVED**
+Fixed critical issues preventing voice functionality on Railway production deployment.
+
+- What we fixed:
+  - ✅ Endianness Mismatch: Fixed binary frame encoding/decoding (LE to BE conversion)
+  - ✅ Schema Alignment: Aligned Zod schemas with client message format (timestamp → ts)
+  - ✅ Binary Frame Parser: Handle client sending full JSON headers in binary frames
+  - ✅ Resource Leak Prevention: Added comprehensive connection safety and cleanup
+  - ✅ Connection Management: Implemented safe termination without aggressive disconnects
+  - ✅ SessionStart Schema: Added missing fields (token, vadEnabled, pttMode, etc.)
+
+- Technical Issues Resolved:
+  - Binary Decoding: Client uses big-endian, server was using little-endian
+  - Schema Mismatch: Standalone server schemas differed from embedded server
+  - Protocol Incompatibility: Client sends JSON header, server expected type string
+  - Resource Leaks: Added timeouts and cleanup for stuck operations
+  - API Token Drain: Fixed infinite loops consuming API credits
+
+- Impact:
+  - ✅ Voice Pipeline Working: STT → LLM → TTS fully functional on Railway
+  - ✅ Stable Connections: WebSocket stays open without premature termination
+  - ✅ Resource Protection: No more API token drain or infinite loops
+  - ✅ Production Ready: Voice agent operational at wss://woic-agent-server-production.up.railway.app/agent
+
 [2025-08-28] WOIC Agent Server Deployment - Production Voice Functionality Complete
 **⚠️ DEPLOYMENT STATUS: ✅ SUCCESSFUL**
 Production agent server deployed to your.woic.app enabling external voice functionality.

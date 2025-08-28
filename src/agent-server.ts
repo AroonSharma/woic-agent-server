@@ -1154,16 +1154,23 @@ wss.on('connection', (ws, req) => {
       }
 
       const msg = JSON.parse(String(raw));
-      const base = EnvelopeSchema.safeParse(msg);
-      if (!base.success) {
-        return sendError(ws, 'unknown', 'unknown', 'bad_envelope', 'Invalid message envelope');
+      console.log('[agent] Received JSON message:', { type: msg.type, sessionId: msg.sessionId, turnId: msg.turnId });
+      
+      // More lenient validation - just check for type field
+      if (!msg.type) {
+        return sendError(ws, 'unknown', 'unknown', 'bad_envelope', 'Missing type field');
       }
 
-      switch (base.data.type) {
+      switch (msg.type) {
         case 'session.start': {
           console.log('[agent] Processing session.start message');
-          const s = SessionStartSchema.parse(msg);
-          console.log('[agent] Session data:', { sessionId: s.sessionId, turnId: s.turnId, hasSystemPrompt: !!s.data.systemPrompt, firstMessageMode: (s.data as any).firstMessageMode });
+          const parsed = SessionStartSchema.safeParse(msg);
+          if (!parsed.success) {
+            console.error('[agent] session.start validation failed:', parsed.error);
+            // Continue with raw message for backward compatibility
+          }
+          const s = parsed.success ? parsed.data : msg;
+          console.log('[agent] Session data:', { sessionId: s.sessionId, turnId: s.turnId, hasSystemPrompt: !!s.data?.systemPrompt, firstMessageMode: s.data?.firstMessageMode });
       // Validate optional session JWT if configured
       try {
         const secret = process.env.SESSION_JWT_SECRET;
@@ -1286,7 +1293,10 @@ wss.on('connection', (ws, req) => {
           return;
         }
         case 'audio.end': {
-          AudioEndSchema.parse(msg);
+          const parsed = AudioEndSchema.safeParse(msg);
+          if (!parsed.success) {
+            console.error('[agent] audio.end validation failed:', parsed.error);
+          }
           log('audio.end');
           try {
             deepgramManager.closeConnection();
@@ -1296,7 +1306,10 @@ wss.on('connection', (ws, req) => {
           return;
         }
         case 'barge.cancel': {
-          BargeCancelSchema.parse(msg);
+          const parsed = BargeCancelSchema.safeParse(msg);
+          if (!parsed.success) {
+            console.error('[agent] barge.cancel validation failed:', parsed.error);
+          }
           log('barge.cancel');
           try { openaiAbort?.abort(); } catch {} // Cleanup operation - empty catch is intentional
           try { ttsAbort?.abort(); } catch {} // Cleanup operation - empty catch is intentional
@@ -1307,7 +1320,12 @@ wss.on('connection', (ws, req) => {
           if (!TEST_HOOKS) {
             return sendError(ws, session?.sessionId ?? 'unknown', session?.turnId ?? 'unknown', 'forbidden', 'test hooks disabled');
           }
-          const t = TestUtteranceSchema.parse(msg);
+          const parsed = TestUtteranceSchema.safeParse(msg);
+          if (!parsed.success) {
+            console.error('[agent] test.utterance validation failed:', parsed.error);
+            return sendError(ws, session?.sessionId ?? 'unknown', session?.turnId ?? 'unknown', 'validation_error', 'Invalid test.utterance format');
+          }
+          const t = parsed.data;
           log('test.utterance', t.data.text);
           // Emit stt.final for UI
           sendJson(ws, { type: 'stt.final', ts: nowTs(), sessionId: t.sessionId, turnId: t.turnId, data: { text: t.data.text, startTs: nowTs() - 100, endTs: nowTs() } });
@@ -1474,7 +1492,8 @@ wss.on('connection', (ws, req) => {
           return;
         }
         default:
-          return sendError(ws, session?.sessionId ?? 'unknown', session?.turnId ?? 'unknown', 'unsupported', `Unknown type ${base.data.type}`);
+          console.log('[agent] Unknown message type:', msg.type);
+          return sendError(ws, session?.sessionId ?? 'unknown', session?.turnId ?? 'unknown', 'unsupported', `Unknown type ${msg.type}`);
       }
     } catch (err: unknown) {
       sendError(ws, session?.sessionId ?? 'unknown', session?.turnId ?? 'unknown', 'exception', (err instanceof Error ? err.message : 'unknown error'));

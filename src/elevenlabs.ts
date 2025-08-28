@@ -188,6 +188,8 @@ export async function streamElevenLabsTTS(opts: ElevenLabsStreamOptions): Promis
         } catch (audioError) {
           console.error('[elevenlabs] Failed to process audio data:', audioError);
           console.error('[elevenlabs] Audio data type:', typeof message.audio);
+          console.error('[elevenlabs] Audio data keys:', message.audio ? Object.keys(message.audio) : 'none');
+          console.error('[elevenlabs] Full message structure:', JSON.stringify(message, null, 2));
           return;
         }
       }

@@ -1,3 +1,31 @@
+[2025-08-28] TTS (Text-to-Speech) Voice Output Investigation - ElevenLabs Integration Debug
+**⚠️ CURRENT STATUS: 🔄 IN PROGRESS - Voice Pipeline 95% Working**
+STT ✅ LLM ✅ TTS ❌ - ElevenLabs audio data parsing issues under investigation.
+
+- Current System Status:
+  - ✅ WebSocket Connection: Stable, no disconnections
+  - ✅ STT (Speech-to-Text): Deepgram capturing user voice perfectly
+  - ✅ LLM (Language Model): OpenAI fallback responses working (connection issues)
+  - ✅ KB (Knowledge Base): Supabase integration added, needs Railway env vars
+  - ❌ TTS (Text-to-Speech): ElevenLabs audio data type parsing errors
+
+- Recent Fixes Applied:
+  - ✅ Added comprehensive Supabase KB integration (grounded.ts, retrieve.ts, kb.ts)
+  - ✅ Fixed package-lock.json sync for Railway deployment
+  - ✅ Added OpenAI fallback responses for connection failures
+  - ✅ Enhanced ElevenLabs WebSocket message parsing for Object data types
+  - ✅ Added detailed TTS debugging logs to identify audio format issues
+
+- Outstanding Issues:
+  - 🔄 ElevenLabs TypeError: message.audio is Object type, expecting Buffer/String
+  - 🔄 Railway missing Supabase environment variables (SUPABASE_URL, SERVICE_ROLE_KEY)
+  - 🔄 OpenAI connection timeouts from Railway environment
+
+- Next Steps Required:
+  1. Add Supabase environment variables to Railway dashboard
+  2. Analyze ElevenLabs message structure from debug logs
+  3. Fix audio data parsing based on actual ElevenLabs format
+
 [2025-08-28] Critical Binary Frame and Schema Fixes - Production Voice Pipeline Restoration
 **⚠️ DEPLOYMENT STATUS: ✅ RESOLVED**
 Fixed critical issues preventing voice functionality on Railway production deployment.

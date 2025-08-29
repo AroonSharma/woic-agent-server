@@ -1,27 +1,113 @@
 # NEXT TASKS - WOIC Agent Server Production Optimization & Enhancement
 
-## ✅ MAJOR MILESTONE COMPLETED (2025-08-28)
-**Status**: ✅ PRODUCTION DEPLOYED & OPERATIONAL
-**Achievement**: Agent server successfully deployed to production at wss://your.woic.app/agent
-**Impact**: External users worldwide can now access complete voice functionality
+## 🔄 CURRENT STATUS (2025-08-28)  
+**Status**: 🔄 VOICE PIPELINE 95% COMPLETE - TTS ISSUE BLOCKING
+**Achievement**: STT ✅ LLM ✅ WebSocket ✅ | TTS ❌ ElevenLabs audio parsing error
+**Impact**: Voice conversations work except final audio output to user
 
 ---
 
-## 🎯 CURRENT STATUS - PRODUCTION OPERATIONAL
+## 🚨 CRITICAL IMMEDIATE TASKS - Complete Voice Output
 
-### ✅ COMPLETED DEPLOYMENT SUCCESS
-**What Now Works**: 
-- ✅ Production agent server: wss://your.woic.app/agent fully operational
-- ✅ External user access: Voice functionality works for all users globally
-- ✅ Complete voice pipeline: Audio → Deepgram STT → OpenAI LLM → ElevenLabs TTS → Audio response
-- ✅ Web app integration: woic.app successfully connects to production agent server
-- ✅ Railway deployment: Containerized deployment with health monitoring operational
-- ✅ Environment configuration: All production API keys validated and functional
-- ✅ Performance: <100ms WebSocket connection latency, <2s voice processing pipeline
+### 1. 🔴 URGENT: Fix ElevenLabs TTS Audio Output
+**Priority**: CRITICAL - Blocking complete voice functionality
+**Status**: Voice pipeline 95% working, TTS parsing error preventing audio output
+**Error**: `TypeError: message.audio is Object type, expecting Buffer/String`
+
+**Steps to Complete**:
+1. 🔄 **Test voice agent** → Check Railway logs for debug output:
+   ```
+   [elevenlabs] Audio data keys: [...]  
+   [elevenlabs] Full message structure: {...}
+   ```
+2. 🔄 **Fix audio parsing** based on ElevenLabs actual format in `/src/elevenlabs.ts`
+3. 🔄 **Test complete voice flow**: User speaks → AI responds with voice
+
+### 2. 🔴 URGENT: Add Railway Environment Variables  
+**Priority**: CRITICAL - Knowledge Base functionality broken
+**Status**: Missing Supabase configuration in Railway
+**Error**: `Supabase service envs not configured`
+
+**Steps to Complete**:
+1. 🔄 **Railway Dashboard** → Environment Variables → Add:
+   ```
+   SUPABASE_URL=https://vwatgqifhdxhesrupgrq.supabase.co
+   SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+   KB_ENABLED=true
+   ```
+2. 🔄 **Redeploy** and verify KB grounding works
+
+### 3. 🟡 MEDIUM: OpenAI Connection Optimization
+**Priority**: MEDIUM - Fallback working but not optimal
+**Status**: OpenAI timeouts, using fallback responses  
+**Error**: `OpenAI attempt failed: Connection error`
+
+**Steps to Complete**:
+1. 🔄 **Investigate** Railway → OpenAI networking issues
+2. 🔄 **Optimize** timeout/retry configuration
+3. 🔄 **Test** direct OpenAI responses vs fallback
 
 ---
 
-## 🚨 IMMEDIATE PRIORITIES - Production Optimization
+## ✅ RECENT COMPLETED WORK
+
+### Voice Pipeline Infrastructure ✅
+- Fixed binary frame endianness (little-endian → big-endian)
+- Aligned client-server message schemas (timestamp → ts fields) 
+- Added comprehensive Supabase KB integration modules
+- Stable WebSocket connections with no disconnections
+
+### Current Working Components ✅
+- **STT (Deepgram)**: Perfect speech recognition
+- **LLM Processing**: Working with fallback responses  
+- **WebSocket Protocol**: Stable message handling
+- **Session Management**: Proper connection lifecycle
+
+---
+
+## 🎯 IMMEDIATE SUCCESS CRITERIA
+
+### Phase 1: Complete Voice Output (THIS WEEK)
+- [ ] **Fix ElevenLabs audio parsing** → User hears AI voice responses
+- [ ] **Add Railway env vars** → Knowledge Base integration working
+- [ ] **Test complete flow** → Speak to AI, AI speaks back with voice
+
+### Phase 2: Production Optimization (NEXT)  
+- [ ] **OpenAI connection stability** → Direct responses instead of fallbacks
+- [ ] **System prompt priority** → Use frontend/DB prompts over .env defaults
+- [ ] **Performance monitoring** → Add comprehensive logging and metrics
+
+---
+
+## 🔧 DEBUG & TESTING
+
+### Test Current Status
+```bash
+# Test at: https://woic.realmonkey.ai/dashboard  
+# Click "Test Agent" → Should see:
+# ✅ STT: "Hello" (speech recognition working)
+# ✅ LLM: "Hello! I'm InsureBot..." (text response working) 
+# ❌ No voice audio output (TTS issue)
+```
+
+### Railway Logs Analysis  
+```bash
+railway logs --follow
+# Look for ElevenLabs debug output:
+[elevenlabs] Audio data keys: [...]
+[elevenlabs] Full message structure: {...}
+```
+
+### Local Comparison Testing
+```bash
+cd /Users/aroonsharma/Projects/woic-agent-server && npm start  # Port 4030
+cd /Users/aroonsharma/Projects/Woic/web && npm run dev        # Port 3000
+# Test local vs Railway behavior
+```
+
+---
+
+## 🔄 NEXT PRIORITIES - Post Voice Fix
 
 ### 📊 Performance Monitoring & Optimization
 

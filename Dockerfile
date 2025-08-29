@@ -14,7 +14,10 @@ RUN npm install
 COPY tsconfig.json ./
 COPY src ./src
 
-# Build TypeScript
+# Build @vapi/types package first
+RUN cd packages/types && npm run build
+
+# Build main application
 RUN npm run build
 
 # Production stage

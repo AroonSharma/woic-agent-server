@@ -34,9 +34,11 @@ RUN npm install --only=production
 
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
+# Copy built @vapi/types from builder stage
+COPY --from=builder /app/packages/types/dist ./packages/types/dist
 
-# Expose WebSocket port
-EXPOSE 4010
+# Expose port (Railway provides PORT env var)
+EXPOSE 8080
 
 # Start server
 CMD ["npm", "start"]

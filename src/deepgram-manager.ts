@@ -237,35 +237,11 @@ export class DeepgramManager {
     });
 
     this.ws.on('close', (code, reason) => {
-    console.error('[deepgram] 🔴 WebSocket CLOSED. Code:', code, 'Reason:', reason?.toString());
-    dbg('[deepgram] 🔴 Close details:', { code, reason: reason?.toString(), readyState: this.ws?.readyState, wasReady: this.ready });
+      console.log('[deepgram] WebSocket CLOSED. Code:', code, 'Reason:', reason?.toString());
       this.cleanup();
-      // Backoff + jitter reconnect strategy for transient closures
-      try {
-        if (this.callbacks) {
-          let attempts = 0;
-          const attemptReconnect = () => {
-            const base = 300; // ms
-            const delay = Math.min(5000, base * Math.pow(2, attempts)) + Math.floor(Math.random() * 200);
-            attempts = Math.min(attempts + 1, 6);
-            dbg('[deepgram] Reconnecting in', delay, 'ms');
-            setTimeout(() => {
-              try {
-                // Simple provider fallback hook (scaffold): environment flag to skip reconnect
-                if (process.env.DEEPGRAM_FALLBACK_DISABLED !== 'true') {
-                  this.createConnection(opts, this.callbacks!, this.sessionContext);
-                } else {
-                  console.error('[deepgram] Fallback disabled by env, not reconnecting');
-                }
-              } catch (e) {
-                dbg('[deepgram] Reconnect attempt failed:', e);
-              }
-            }, delay);
-          };
-          attemptReconnect();
-        }
-      } catch (e: unknown) {
-        console.error('[error] Unexpected error:', e instanceof Error ? e.message : String(e));
+      // Don't auto-reconnect - let the main agent decide when to reconnect
+      if (this.callbacks?.onClose) {
+        this.callbacks.onClose(code, reason?.toString() || '');
       }
     });
   }

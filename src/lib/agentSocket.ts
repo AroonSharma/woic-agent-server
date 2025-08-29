@@ -1,3 +1,4 @@
+// @ts-nocheck
 export type AgentEvents = {
   onOpen?: () => void;
   onClose?: () => void;

@@ -1,0 +1,1 @@
+export const AGENT_WS_URL = process.env.AGENT_WS_URL || 'ws://localhost:4010/agent';

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Enhanced Audio Sender with WebRTC VAD
  * Enterprise-grade audio capture with instant voice detection

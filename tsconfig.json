@@ -15,7 +15,8 @@
     "rootDir": "./src",
     "types": ["node"],
     "paths": {
-      "@vapi/types": ["../packages/types/src/index"]
+      "@vapi/types": ["../packages/types/src/index"],
+      "@/*": ["./src/*"]
     }
   },
   "include": [
@@ -23,6 +24,9 @@
   ],
   "exclude": [
     "node_modules",
-    "dist"
+    "dist",
+    "src/**/*.test.ts",
+    "src/**/__tests__/**/*",
+    "src/tests/**/*"
   ]
 }

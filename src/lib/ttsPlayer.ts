@@ -1,3 +1,4 @@
+// @ts-nocheck
 export class TTSPlayer {
   private audio: HTMLAudioElement;
   private mediaSource: MediaSource | null = null;

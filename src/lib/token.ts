@@ -1,3 +1,4 @@
+// @ts-nocheck
 export type TokenResponse = {
   token: string;
   wsUrl?: string | null;

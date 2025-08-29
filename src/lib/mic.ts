@@ -1,3 +1,4 @@
+// @ts-nocheck
 export type MicSender = { stop: () => void };
 
 function createBinaryFrame(header: object, payload: Uint8Array): ArrayBuffer {

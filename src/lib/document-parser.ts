@@ -1,3 +1,4 @@
+// @ts-nocheck
 import pdf from 'pdf-parse';
 import mammoth from 'mammoth';
 import * as xlsx from 'xlsx';

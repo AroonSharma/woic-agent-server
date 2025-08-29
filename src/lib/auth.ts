@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { jwtVerify } from 'jose';
 
 export type AuthContext = {

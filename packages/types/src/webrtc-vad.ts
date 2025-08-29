@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * WebRTC VAD (Voice Activity Detection) Module
  * Enterprise-grade voice detection used by companies like Vapi, Retell, Bland

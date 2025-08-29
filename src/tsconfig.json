@@ -12,14 +12,14 @@
     "resolveJsonModule": true,
     "declaration": false,
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": ".",
     "types": ["node"],
     "paths": {
-      "@vapi/types": ["../packages/types/src/index"]
+      "@vapi/types": ["../../packages/types/src/index"]
     }
   },
   "include": [
-    "src/**/*.ts"
+    "*.ts"
   ],
   "exclude": [
     "node_modules",

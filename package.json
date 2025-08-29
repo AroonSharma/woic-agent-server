@@ -1,7 +1,7 @@
 {
   "name": "woic-agent-server",
   "version": "1.0.0",
-  "description": "WebSocket agent server for voice interactions",
+  "description": "Voice WebSocket agent server - 100% working copy from local",
   "main": "dist/agent-server.js",
   "scripts": {
     "build": "tsc",
@@ -9,22 +9,22 @@
     "dev": "ts-node src/agent-server.ts",
     "test": "echo \"No tests yet\""
   },
+  "workspaces": {
+    "packages": ["packages/*"]
+  },
   "dependencies": {
-    "@deepgram/sdk": "^3.10.0",
-    "@supabase/supabase-js": "^2.39.7",
-    "@types/ws": "^8.5.13",
-    "axios": "^1.7.9",
-    "dotenv": "^16.4.7",
-    "elevenlabs": "^1.0.6",
-    "livekit-server-sdk": "^2.9.2",
+    "@supabase/supabase-js": "^2.55.0",
+    "axios": "^1.11.0",
+    "dotenv": "^17.2.1",
     "openai": "^4.77.0",
     "uuid": "^11.0.5",
-    "ws": "^8.18.0",
+    "ws": "^8.18.3",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",
     "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.5.13",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3"
   },

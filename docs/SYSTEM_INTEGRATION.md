@@ -1,12 +1,12 @@
 # WOIC System Integration Reference
 **Purpose**: Defines integration points between Web App and Agent Server
 **Status**: Production Operational
-**Last Updated**: 2025-08-28
+**Last Updated**: 2025-08-29
 
 ## 🏗️ System Architecture Overview
 
 ```
-Web Application (woic.app)           Agent Server (your.woic.app)
+Web Application (woic.app)           Agent Server (woic-agent-server-production.up.railway.app)
 ├── Next.js Frontend                 ├── WebSocket Server  
 ├── Authentication UI                ├── Voice Processing Pipeline
 ├── Agent Management                 ├── STT → LLM → TTS
@@ -18,7 +18,7 @@ Web Application (woic.app)           Agent Server (your.woic.app)
 
 ### 1. **WebSocket Connection**
 ```
-Web App → wss://your.woic.app/agent
+Web App → wss://woic-agent-server-production.up.railway.app/agent
 Protocol: WebSocket with JSON messages
 Authentication: Session token via connection headers
 Purpose: Real-time voice processing communication
@@ -79,7 +79,7 @@ Cleanup: Both systems coordinate session termination
 
 ### Web App (.env):
 ```
-NEXT_PUBLIC_AGENT_WS_URL=wss://your.woic.app/agent
+NEXT_PUBLIC_AGENT_WS_URL=wss://woic-agent-server-production.up.railway.app/agent
 SESSION_JWT_SECRET=<shared-secret>
 ```
 
@@ -110,8 +110,8 @@ PORT=4010
 - **API**: https://woic.app/api/*
 
 ### Agent Server:
-- **WebSocket**: wss://your.woic.app/agent
-- **Health Check**: https://your.woic.app/healthz
+- **WebSocket**: wss://woic-agent-server-production.up.railway.app/agent
+- **Health Check**: https://woic-agent-server-production.up.railway.app/healthz
 
 ## 🔄 Error Handling Integration
 
@@ -129,15 +129,17 @@ TTS Error → Agent server fallback → Web App shows processing status
 Session Timeout → Both systems cleanup → Web App resets voice UI
 ```
 
-## 🎯 Integration Testing Checklist
+## 🎯 Integration Testing Checklist - ALL COMPLETED
 
-- [ ] WebSocket connection establishment
-- [ ] Authentication token validation
-- [ ] Voice configuration synchronization
-- [ ] Audio streaming (both directions)
-- [ ] Error handling and recovery
-- [ ] Session cleanup on disconnect
-- [ ] CORS validation for production domains
+- [✅] WebSocket connection establishment
+- [✅] Authentication token validation
+- [✅] Voice configuration synchronization
+- [✅] Audio streaming (both directions)
+- [✅] Error handling and recovery
+- [✅] Session cleanup on disconnect
+- [✅] CORS validation for production domains
+- [✅] Complete STT → LLM → TTS pipeline operational
+- [✅] User can hear AI voice responses in production
 
 ## ⚠️ Integration Rules for AI Assistants
 

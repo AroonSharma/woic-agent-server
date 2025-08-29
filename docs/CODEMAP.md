@@ -3,16 +3,17 @@
 ## 🎯 Architecture Overview - Standalone WebSocket Voice Processing Service
 
 **Primary Function**: Real-time voice processing WebSocket server for WOIC platform
-**Production URL**: wss://your.woic.app/agent  
-**Deployment**: Railway containerized deployment with Docker
+**Production URL**: wss://woic-agent-server-production.up.railway.app/agent  
+**Deployment**: Railway containerized deployment with Docker (Port 8080)
 
 ### Top-Level Structure - Agent Server
 
 ```
 /src/                           # TypeScript source code
 ├── agent-server.ts             # Main WebSocket server entry point (1,444 lines)
-├── agent-config.ts             # Centralized configuration management 
-├── types.ts                    # Local type definitions (replaces @vapi/types)
+├── agent-config.ts             # Centralized configuration management with API key validation
+├── types.ts                    # Local type definitions 
+├── packages/types/             # @vapi/types workspace package for schema definitions
 ├── deepgram-manager.ts         # Speech-to-text WebSocket handling
 ├── elevenlabs.ts               # Text-to-speech streaming
 ├── conversation-memory.ts      # Chat history and session management

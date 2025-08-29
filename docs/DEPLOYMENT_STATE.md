@@ -6,10 +6,11 @@ Separated from main web application to enable external user access.
 
 ## Current Status
 - **Repository**: https://github.com/AroonSharma/woic-agent-server.git
-- **Railway Project**: Connected and deploying
-- **Custom Domain**: your.woic.app (configured)
-- **Last Deploy**: Railway healthcheck fixes committed
-- **Status**: Monitoring deployment progress
+- **Railway Project**: ✅ FULLY OPERATIONAL
+- **Production URL**: https://woic-agent-server-production.up.railway.app
+- **WebSocket Endpoint**: wss://woic-agent-server-production.up.railway.app/agent
+- **Last Deploy**: Complete voice pipeline fixes deployed (2025-08-29)
+- **Status**: ✅ VOICE PIPELINE 100% OPERATIONAL
 
 ## Environment Variables Required
 
@@ -86,12 +87,12 @@ The main web application at https://woic.realmonkey.ai connects to this server:
 
 ```typescript
 // Production WebSocket connection
-const wsUrl = 'wss://your.woic.app/agent';
+const wsUrl = 'wss://woic-agent-server-production.up.railway.app/agent';
 
 // Development fallback  
 const wsUrl = process.env.NODE_ENV === 'development' 
   ? 'ws://localhost:4010/agent'
-  : 'wss://your.woic.app/agent';
+  : 'wss://woic-agent-server-production.up.railway.app/agent';
 ```
 
 ## Architecture Benefits
@@ -117,19 +118,23 @@ const wsUrl = process.env.NODE_ENV === 'development'
 
 ## Recent Changes
 
-### Latest Commit: Railway Fixes
-- Fixed healthcheck path from `/health` to `/healthz`
-- Added proper Railway PORT environment variable support
-- Increased healthcheck timeout to 300 seconds
-- Improved error handling for deployment edge cases
+### Latest Commit: Complete Production Deployment (2025-08-29)
+- ✅ Fixed ElevenLabs TTS audio output (removed extra space in API key)
+- ✅ Fixed @vapi/types module Docker build issues
+- ✅ Resolved Deepgram infinite reconnection API credit drain
+- ✅ Fixed Railway health check configuration (PORT environment variable)
+- ✅ Removed .env file dependencies for Railway compatibility
+- ✅ Added session-aware reconnection logic
+- ✅ Complete STT → LLM → TTS pipeline operational
 
-## Next Steps
+## Completed Deployment
 
-1. ✅ Monitor current Railway deployment
-2. ⏳ Verify production deployment success  
-3. ⏳ Test WebSocket connection from external network
-4. ⏳ Update web app configuration to use your.woic.app
-5. ⏳ End-to-end voice functionality testing
+1. ✅ Railway deployment fully operational
+2. ✅ Production voice pipeline verified working  
+3. ✅ WebSocket connections stable from external networks
+4. ✅ Voice processing (STT → LLM → TTS) operational
+5. ✅ All API integrations (Deepgram, OpenAI, ElevenLabs) working
+6. ✅ User can hear AI voice responses in production
 
 ---
-*Last Updated: 2025-08-27 - Railway healthcheck fixes deployed*
+*Last Updated: 2025-08-29 - Voice Pipeline 100% Operational on Railway*

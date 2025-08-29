@@ -1,3 +1,16 @@
+[2025-08-29] Complete Railway Production Fixes - Voice Pipeline 100% Operational
+
+- Context: Railway deployment had multiple critical issues preventing voice functionality: TTS parsing errors, API connection failures, Docker build problems, and Deepgram connection leaks
+- Issues addressed:
+  a. ElevenLabs TTS audio parsing errors (resolved by fixing extra space in OpenAI API key)
+  b. @vapi/types module build failures (fixed Docker multi-stage build)
+  c. Deepgram infinite reconnection consuming API credits (added session-aware reconnection)
+  d. Railway health check failures (combined HTTP/WebSocket on same port)
+  e. Configuration loading issues (removed .env dependencies)
+- Decision: Systematic fix of all deployment issues rather than partial solutions
+- Consequences: Complete voice pipeline operational; no API credit drain; stable Railway deployment; user can hear AI voice responses; production ready
+
+---
 [2025-08-28] Production Railway Deployment - Microservices Architecture Implementation
 
 - Context: Agent server needed to be accessible to external users for voice functionality, previously only worked on localhost

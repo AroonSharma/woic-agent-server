@@ -4,7 +4,7 @@ This document tracks the code files and their functionality, impact, and design 
 
 ---
 
-## [2025-08-28] Production Agent Server Deployment - Complete Voice Processing System
+## [2025-08-29] Production Agent Server Deployment - Voice Pipeline 100% Operational
 
 ### Core Server Infrastructure - WebSocket Voice Processing
 
@@ -200,14 +200,14 @@ This document tracks the code files and their functionality, impact, and design 
 ### **Railway Deployment Architecture**
 **Infrastructure**:
 - **Service**: woic-agent-server deployed on Railway
-- **Domain**: your.woic.app with automatic SSL/WSS
+- **Domain**: woic-agent-server-production.up.railway.app with automatic SSL/WSS
 - **Repository**: https://github.com/AroonSharma/woic-agent-server
 - **Monitoring**: /healthz endpoint for Railway health checks
 
 ### **Web App Integration**
 **Connection Flow**:
 1. Web app (woic.app) loads with production configuration
-2. WebSocket connection established to wss://your.woic.app/agent
+2. WebSocket connection established to wss://woic-agent-server-production.up.railway.app/agent
 3. Real-time voice processing via agent server
 4. Complete voice pipeline: Audio → STT → LLM → TTS → Audio response
 

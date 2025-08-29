@@ -59,7 +59,6 @@ import { streamElevenLabsTTS } from './elevenlabs';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 // axios import removed (unused)
-import * as http from 'http';
 
 // Enforce session JWT presence in production
 if (process.env.NODE_ENV === 'production' && !process.env.SESSION_JWT_SECRET) {

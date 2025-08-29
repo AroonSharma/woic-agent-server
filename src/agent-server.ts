@@ -98,7 +98,7 @@ type SessionState = {
 };
 
 // Create HTTP server that handles both WebSocket upgrades and health checks
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   if (!req.url) { res.statusCode = 400; return res.end('Bad Request'); }
   
   if (req.url === '/healthz') {
@@ -107,6 +107,56 @@ const server = http.createServer((req, res) => {
       status: 'healthy',
       timestamp: new Date().toISOString()
     }));
+  }
+  
+  if (req.url === '/debug/connectivity') {
+    res.setHeader('Content-Type', 'application/json');
+    const results: any = {};
+    
+    // Test DNS resolution
+    try {
+      const dns = await import('dns').then(m => m.promises);
+      await dns.resolve4('api.deepgram.com');
+      results.deepgramDNS = 'OK';
+    } catch (e: any) {
+      results.deepgramDNS = `FAILED: ${e.message}`;
+    }
+    
+    try {
+      const dns = await import('dns').then(m => m.promises);
+      await dns.resolve4('api.openai.com');
+      results.openaiDNS = 'OK';
+    } catch (e: any) {
+      results.openaiDNS = `FAILED: ${e.message}`;
+    }
+    
+    // Test HTTPS connectivity
+    try {
+      const https = await import('https');
+      await new Promise((resolve, reject) => {
+        https.get('https://api.deepgram.com', (res) => {
+          resolve(res.statusCode);
+        }).on('error', reject);
+      });
+      results.deepgramHTTPS = 'OK';
+    } catch (e: any) {
+      results.deepgramHTTPS = `FAILED: ${e.message}`;
+    }
+    
+    try {
+      const https = await import('https');
+      await new Promise((resolve, reject) => {
+        https.get('https://api.openai.com', (res) => {
+          resolve(res.statusCode);
+        }).on('error', reject);
+      });
+      results.openaiHTTPS = 'OK';
+    } catch (e: any) {
+      results.openaiHTTPS = `FAILED: ${e.message}`;
+    }
+    
+    results.timestamp = new Date().toISOString();
+    return res.end(JSON.stringify(results, null, 2));
   }
   
   if (req.url === '/metrics') {

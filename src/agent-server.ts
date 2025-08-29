@@ -1,9 +1,10 @@
-import { config } from 'dotenv';
+// Removed dotenv loading - config comes from frontend and Railway environment variables
+// import { config } from 'dotenv';
 import * as path from 'path';
 
-// Prefer repository root .env; fall back to web/.env
-config({ path: path.join(__dirname, '..', '..', '.env') });
-config({ path: path.join(__dirname, '..', '.env') });
+// Don't load .env files in production - use Railway environment variables
+// config({ path: path.join(__dirname, '..', '..', '.env') });
+// config({ path: path.join(__dirname, '..', '.env') });
 import { WebSocket, WebSocketServer } from 'ws';
 import * as http from 'http';
 import * as dns from 'dns';
@@ -918,7 +919,7 @@ wss.on('connection', (ws, req) => {
             session = {
                 sessionId: s.sessionId,
                 turnId: s.turnId,
-              systemPrompt: s.data.systemPrompt || process.env.SYSTEM_PROMPT || 'You are InsureBot, an AI insurance assistant. Be helpful and conversational.',
+              systemPrompt: s.data.systemPrompt || 'You are a helpful AI assistant.',
                 voiceId: s.data.voiceId ?? null,
                 vadEnabled: s.data.vadEnabled,
                 pttMode: s.data.pttMode,
@@ -944,7 +945,7 @@ wss.on('connection', (ws, req) => {
               session.turnId = s.turnId;
               const newSystemPrompt = s.data.systemPrompt || session.systemPrompt;
               if (newSystemPrompt !== session.systemPrompt) {
-              session.systemPrompt = newSystemPrompt || process.env.SYSTEM_PROMPT || session.systemPrompt;
+              session.systemPrompt = newSystemPrompt || session.systemPrompt;
               conversationMemory.updateSystemPrompt(s.sessionId, session.systemPrompt);
               }
               session.voiceId = s.data.voiceId ?? session.voiceId;

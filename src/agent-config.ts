@@ -85,6 +85,14 @@ function loadAPIKeysConfig(): APIKeysConfig {
   if (!defaultVoiceId) {
     throw new Error('VOICE_ID environment variable is required');
   }
+  
+  // Debug log to check API key format
+  console.log('[config] OpenAI API key format check:', {
+    length: openaiApiKey.length,
+    prefix: openaiApiKey.substring(0, 10),
+    hasBearer: openaiApiKey.includes('Bearer'),
+    startsWithSk: openaiApiKey.startsWith('sk-')
+  });
 
   return {
     deepgramApiKey,

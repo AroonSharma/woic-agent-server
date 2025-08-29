@@ -217,8 +217,17 @@ export class DeepgramManager {
     dbg('[deepgram] 🔴 Close details:', { code, reason: reason?.toString(), readyState: this.ws?.readyState, wasReady: this.ready });
       this.cleanup();
       // Backoff + jitter reconnect strategy for transient closures
+      // CRITICAL FIX: Only reconnect if there's an active session to prevent API credit drain
       try {
-        if (this.callbacks) {
+        if (this.callbacks && this.sessionContext) {
+          // Check if session is still active (has sessionId)
+          const isSessionActive = this.sessionContext && this.sessionContext.sessionId;
+          
+          if (!isSessionActive) {
+            console.log('[deepgram] Session ended, not reconnecting to prevent API credit drain');
+            return;
+          }
+          
           let attempts = 0;
           const attemptReconnect = () => {
             const base = 300; // ms
@@ -227,11 +236,11 @@ export class DeepgramManager {
             dbg('[deepgram] Reconnecting in', delay, 'ms');
             setTimeout(() => {
               try {
-                // Simple provider fallback hook (scaffold): environment flag to skip reconnect
-                if (process.env.DEEPGRAM_FALLBACK_DISABLED !== 'true') {
-                  this.createConnection(opts, this.callbacks!, this.sessionContext);
+                // Check environment flags for reconnect behavior
+                if (process.env.DEEPGRAM_AUTO_RECONNECT === 'false' || process.env.DEEPGRAM_FALLBACK_DISABLED === 'true') {
+                  console.error('[deepgram] Auto-reconnect disabled by environment variable');
                 } else {
-                  console.error('[deepgram] Fallback disabled by env, not reconnecting');
+                  this.createConnection(opts, this.callbacks!, this.sessionContext);
                 }
               } catch (e) {
                 dbg('[deepgram] Reconnect attempt failed:', e);

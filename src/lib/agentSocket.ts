@@ -53,7 +53,7 @@ export function connectAgent(params: {
         ts: Date.now(),
         sessionId,
         turnId,
-        data: { systemPrompt, voiceId, vadEnabled: true, pttMode: false, endpointing, firstMessageMode: 'assistant_speaks_first', language },
+        data: { systemPrompt, voiceId, vadEnabled: true, pttMode: false, endpointing, firstMessageMode: 'user_speaks_first', language },
       })
     );
   };
@@ -83,7 +83,7 @@ export function connectAgent(params: {
             ts: Date.now(),
             sessionId,
             turnId,
-            data: { systemPrompt, voiceId, vadEnabled: true, pttMode: false, endpointing, firstMessageMode: 'assistant_speaks_first', language, token },
+            data: { systemPrompt, voiceId, vadEnabled: true, pttMode: false, endpointing, firstMessageMode: 'user_speaks_first', language, token },
           })
         );
       } catch {
@@ -191,7 +191,7 @@ export function connectAgent(params: {
             ts: Date.now(),
             sessionId,
             turnId: newTurnId,
-            data: { systemPrompt, voiceId, vadEnabled: true, pttMode: false, endpointing: newEp, firstMessageMode: 'assistant_speaks_first', language },
+            data: { systemPrompt, voiceId, vadEnabled: true, pttMode: false, endpointing: newEp, firstMessageMode: 'user_speaks_first', language },
           })
         );
       } catch (e: unknown) {

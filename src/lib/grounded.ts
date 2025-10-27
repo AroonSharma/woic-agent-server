@@ -85,14 +85,19 @@ function normalizeTokens(input: string): string[] {
   const base = String(input || '').toLowerCase().replace(/[^a-z0-9\s]+/g, ' ');
   const raw = base.split(/\s+/).filter(Boolean);
   const out = new Set<string>();
+
+  // Generic token normalization - no hardcoded company-specific terms
   for (const t of raw) {
     out.add(t);
-    if (t === 'webdesign') { out.add('web'); out.add('design'); }
-    if (t === 'ai') { out.add('artificial'); out.add('intelligence'); }
+
+    // Only handle common compound word splitting (generic)
+    if (t.length > 8 && /[a-z][A-Z]/.test(t)) {
+      // Split camelCase: "webDesign" → "web", "design"
+      const parts = t.split(/(?=[A-Z])/);
+      parts.forEach(p => out.add(p.toLowerCase()));
+    }
   }
-  // Common composites
-  if (out.has('web') && out.has('design')) out.add('web design');
-  if (out.has('ai') && out.has('development')) out.add('ai development');
+
   return Array.from(out);
 }
 

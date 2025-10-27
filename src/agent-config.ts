@@ -50,16 +50,16 @@ function loadServerConfig(): AgentServerConfig {
 
 function loadSTTConfig(): STTConfig {
   return {
-    silenceTimeoutMs: Number(process.env.STT_SILENCE_TIMEOUT_MS || 2000),  // Allow 2s natural pause before promoting
-    utteranceEndMs: Number(process.env.DEEPGRAM_UTTERANCE_END_MS || 1000), // Slightly increased for stability
-    endpointingMs: Number(process.env.DEEPGRAM_ENDPOINTING_MS || 400)      // Balanced setting
+    silenceTimeoutMs: Number(process.env.STT_SILENCE_TIMEOUT_MS || 2500),  // Increased to 2.5s to allow complete sentences
+    utteranceEndMs: Number(process.env.DEEPGRAM_UTTERANCE_END_MS || 1200), // Increased for better sentence boundary detection
+    endpointingMs: Number(process.env.DEEPGRAM_ENDPOINTING_MS || 800)      // More conservative to prevent premature cuts
   };
 }
 
 function loadTTSConfig(): TTSConfig {
   return {
     minDurationMs: Number(process.env.TTS_MIN_DURATION_MS || 1000),       // Reduced from 3000ms
-    bargeThresholdWords: Number(process.env.TTS_BARGE_THRESHOLD_WORDS || 3), // Reduced from 5
+    bargeThresholdWords: Number(process.env.TTS_BARGE_THRESHOLD_WORDS || 2), // Lower threshold for snappier barge-in
     protectedPhrasesEnabled: String(process.env.TTS_PROTECTED_PHRASES || 'true') === 'true',
     sentenceBoundaryProtection: String(process.env.TTS_SENTENCE_BOUNDARY_PROTECTION || 'true') === 'true',
     clauseProtectionMs: Number(process.env.TTS_CLAUSE_PROTECTION_MS || 800), // Reduced from 1500ms
@@ -69,6 +69,7 @@ function loadTTSConfig(): TTSConfig {
 
 function loadAPIKeysConfig(): APIKeysConfig {
   const deepgramApiKey = process.env.DEEPGRAM_API_KEY;
+  console.log('[agent-config] DEEPGRAM_API_KEY loaded:', deepgramApiKey ? `${deepgramApiKey.slice(0, 10)}...` : 'MISSING');
   const openaiApiKey = process.env.OPENAI_API_KEY;
   const elevenlabsApiKey = process.env.ELEVENLABS_API_KEY;
   const defaultVoiceId = process.env.VOICE_ID;
@@ -237,3 +238,10 @@ export const MAX_FRAME_BYTES = Number(process.env.MAX_FRAME_BYTES || 262144); //
 export const MAX_JSON_BYTES = Number(process.env.MAX_JSON_BYTES || 65536); // 64KB
 // Per-session max audio frames per second (token-bucket capacity and refill rate)
 export const MAX_AUDIO_FRAMES_PER_SEC = Number(process.env.MAX_AUDIO_FRAMES_PER_SEC || 100);
+
+// ===== PHASE 1 FEATURE FLAGS (No behavior change yet) =====
+export const ENABLE_MULTI_PROVIDER = String(process.env.ENABLE_MULTI_PROVIDER || 'false') === 'true';
+export const MULTI_PROVIDER_ROLLOUT_PERCENTAGE = Number(process.env.MULTI_PROVIDER_ROLLOUT_PERCENTAGE || 0);
+export const API_KEY_ENCRYPTION_KEY = process.env.API_KEY_ENCRYPTION_KEY;
+// ===== PHASE 2 FEATURE FLAGS =====
+export const ENABLE_PROVIDER_ROUTER = String(process.env.ENABLE_PROVIDER_ROUTER || 'false') === 'true';

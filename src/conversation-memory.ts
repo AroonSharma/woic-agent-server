@@ -23,7 +23,7 @@ class ConversationMemoryManager {
     this.cleanupTimer = setInterval(() => this.cleanup(), MEMORY_CLEANUP_INTERVAL);
   }
 
-  createConversation(sessionId: string, systemPrompt: string): ConversationMemory {
+  createConversation(sessionId: string, systemPrompt: string, initialAssistantMessage?: string): ConversationMemory {
     // Enforce cap: evict oldest conversations by lastUpdated
     if (this.conversations.size >= MAX_CONVERSATIONS) {
       let oldestKey: string | null = null;
@@ -40,8 +40,17 @@ class ConversationMemoryManager {
       }
     }
     const now = Date.now();
+    
+    const messages: ConversationMessage[] = [{ role: 'system', content: systemPrompt }];
+    
+    // Add initial assistant message if provided
+    if (initialAssistantMessage) {
+      messages.push({ role: 'assistant', content: initialAssistantMessage });
+      console.log(`[memory] Added initial assistant message to session ${sessionId}: "${initialAssistantMessage}"`);
+    }
+    
     const memory: ConversationMemory = {
-      messages: [{ role: 'system', content: systemPrompt }],
+      messages,
       sessionId,
       created: now,
       lastUpdated: now

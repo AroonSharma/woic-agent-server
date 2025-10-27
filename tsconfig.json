@@ -12,10 +12,11 @@
     "resolveJsonModule": true,
     "declaration": false,
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": "./",
+    "baseUrl": "./",
     "types": ["node"],
     "paths": {
-      "@vapi/types": ["../packages/types/src/index"],
+      "@vapi/types": ["./packages/types/src/index"],
       "@/*": ["./src/*"]
     }
   },

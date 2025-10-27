@@ -1,5 +1,6 @@
 import { supabaseService } from './supabaseServer';
 import { openAIEmbed } from './kb';
+import OpenAI from 'openai';
 
 export interface RetrievedChunk {
   chunkId: string;
@@ -11,39 +12,104 @@ export interface RetrievedChunk {
     embedDistance?: number;
     embedSim?: number;
     kwRank?: number;
+    rerankScore?: number;
   };
 }
+
+const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
+const DEBUG = LOG_LEVEL === 'debug';
 
 export async function embedQuery(query: string): Promise<number[]> {
   if (!query || !query.trim()) throw new Error('query_required');
   const vec = (await openAIEmbed(query)) as number[];
+  if (DEBUG) console.log('[embedQuery] Generated embedding:', { dimensions: vec.length });
   return vec;
 }
 
-function rewriteQuery(query: string): string {
+/**
+ * AI-powered query rewriting with semantic expansion
+ * Replaces hardcoded term matching with dynamic AI-based query expansion
+ */
+async function rewriteQuery(query: string): Promise<string> {
   const q = String(query || '').trim().toLowerCase();
-  // Normalize common ASR artifacts and branding
-  const map: Array<[RegExp, string]> = [
-    [/webdesign/g, 'web design'],
-    [/real ?monkey/g, 'realmonkey'],
-    [/a[\. ]?i[\. ]?/g, 'ai'],
-    [/website\s*designing/g, 'website design'],
-  ];
-  let out = q;
-  for (const [re, rep] of map) out = out.replace(re, rep);
-  // Expand to include service terms (generic, no brand hard-coding)
-  const expansions: string[] = [];
-  if (/ai/.test(out)) expansions.push('artificial intelligence');
-  if (/web design/.test(out)) expansions.push('website design');
-  // Avoid brand/tenant-specific hardcoding for enterprise readiness
-  const uniq = Array.from(new Set([out, ...expansions].filter(Boolean)));
-  return uniq.join(' | ');
+
+  // Basic normalization (only generic ASR artifacts, no brand-specific terms)
+  const normalized = q
+    .replace(/\ba[\. ]?i[\. ]?\b/gi, 'ai')
+    .replace(/\bwebsite\s*design(?:ing)?\b/gi, 'website design')
+    .trim();
+
+  if (DEBUG) console.log('[rewriteQuery] Normalized query:', { original: query, normalized });
+
+  // Use AI to generate semantic variations for better retrieval
+  try {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey || !apiKey.startsWith('sk-')) {
+      if (DEBUG) console.log('[rewriteQuery] No API key, using normalized query only');
+      return normalized;
+    }
+
+    const openai = new OpenAI({ apiKey });
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{
+        role: 'system',
+        content: 'Generate 2-4 semantic variations and related terms for search. Return ONLY comma-separated phrases, no explanations. Focus on: synonyms, phonetically similar words, related concepts, alternative spellings, industry terms. If the word sounds like a name or brand, include similar-sounding variations.'
+      }, {
+        role: 'user',
+        content: `Query: "${normalized}"\n\nConsider: This might be misheard speech-to-text. Include phonetically similar terms.`
+      }],
+      temperature: 0.4,
+      max_tokens: 100
+    });
+
+    const aiVariations = response.choices[0]?.message?.content
+      ?.split(',')
+      .map(s => s.trim().toLowerCase())
+      .filter(s => s.length > 2 && s.length < 100) || [];
+
+    // Combine original + AI variations
+    const allVariations = [normalized, ...aiVariations];
+    const unique = Array.from(new Set(allVariations));
+    const combined = unique.slice(0, 5).join(' | '); // Limit to 5 variations
+
+    if (DEBUG) {
+      console.log('[rewriteQuery] AI-expanded query:', {
+        original: query,
+        normalized,
+        aiVariations,
+        combined
+      });
+    }
+
+    return combined;
+  } catch (err) {
+    console.warn('[rewriteQuery] AI expansion failed, using normalized query:', err instanceof Error ? err.message : String(err));
+    return normalized;
+  }
 }
 
 export async function retrieve(query: string, agentId: string | null, topK = 6): Promise<RetrievedChunk[]> {
+  const startTime = Date.now();
   const sb = supabaseService();
-  const rewritten = rewriteQuery(query);
+
+  console.log('[retrieve] 🔍 Starting retrieval:', {
+    query,
+    agentId,
+    topK,
+    timestamp: new Date().toISOString()
+  });
+
+  const rewritten = await rewriteQuery(query); // Now async
   const embedding = await embedQuery(query);
+
+  if (DEBUG) {
+    console.log('[retrieve] Query prepared:', {
+      original: query,
+      rewritten: rewritten.substring(0, 200) + (rewritten.length > 200 ? '...' : ''),
+      embeddingDimensions: embedding.length
+    });
+  }
 
   // Vector search
   let vData: unknown[] | null = null;
@@ -53,10 +119,15 @@ export async function retrieve(query: string, agentId: string | null, topK = 6):
     p_top_k: topK
   });
   if (vErr) {
-    // Soft-fail vector search; rely on keyword search
+    console.error('[retrieve] ❌ Vector search failed:', vErr.message);
     vData = [];
   } else {
     vData = vTry as any[];
+    console.log('[retrieve] ✅ Vector search results:', {
+      count: Array.isArray(vData) ? vData.length : 0,
+      agentIdUsed: agentId,
+      topDistance: Array.isArray(vData) && vData.length > 0 ? (vData[0] as any).distance : null
+    });
   }
 
   // Keyword search
@@ -66,8 +137,17 @@ export async function retrieve(query: string, agentId: string | null, topK = 6):
     p_top_k: topK
   });
   if (kErr) {
+    console.error('[retrieve] ❌ Keyword search failed:', kErr.message);
     // If both fail, return empty
-    if (!vData || vData.length === 0) return [];
+    if (!vData || vData.length === 0) {
+      console.warn('[retrieve] ⚠️ Both vector and keyword search failed, returning empty');
+      return [];
+    }
+  } else {
+    console.log('[retrieve] ✅ Keyword search results:', {
+      count: Array.isArray(kData) ? kData.length : 0,
+      topRank: Array.isArray(kData) && kData.length > 0 ? (kData[0] as any).rank : null
+    });
   }
 
   const v = Array.isArray(vData) ? vData : [];
@@ -76,6 +156,7 @@ export async function retrieve(query: string, agentId: string | null, topK = 6):
   // Last-resort fallback: direct text search if both RPCs yield nothing
   let direct: unknown[] = [];
   if (v.length === 0 && k.length === 0) {
+    console.log('[retrieve] 🔄 Both searches empty, trying direct text search fallback...');
     try {
       const { data: d } = await sb
         .from('kb_chunks')
@@ -91,10 +172,13 @@ export async function retrieve(query: string, agentId: string | null, topK = 6):
           content: row.content,
           rank: 0.5,
         }));
+        console.log('[retrieve] ✅ Direct search found:', direct.length, 'chunks');
+      } else {
+        console.log('[retrieve] ⚠️ Direct search returned no results');
       }
     } catch (e: unknown) {
-        console.error('[error] Unexpected error:', e instanceof Error ? e.message : String(e));
-      }
+      console.error('[retrieve] ❌ Direct search failed:', e instanceof Error ? e.message : String(e));
+    }
   }
 
   // Prepare normalization
@@ -139,6 +223,7 @@ export async function retrieve(query: string, agentId: string | null, topK = 6):
 
   // Include direct matches if still empty
   if (merged.size === 0 && direct.length > 0) {
+    console.log('[retrieve] Using direct fallback results');
     for (const row of direct) {
       merged.set(String((row as any).chunk_id), {
         chunkId: String((row as any).chunk_id),
@@ -151,7 +236,37 @@ export async function retrieve(query: string, agentId: string | null, topK = 6):
     }
   }
 
-  return Array.from(merged.values())
+  const finalResults = Array.from(merged.values())
     .sort((a, b) => b.score - a.score)
     .slice(0, topK);
+
+  const elapsedMs = Date.now() - startTime;
+
+  console.log('[retrieve] 🎯 Final results:', {
+    totalChunks: finalResults.length,
+    topScores: finalResults.slice(0, 3).map(r => ({
+      chunkId: r.chunkId.substring(0, 8) + '...',
+      sourceId: r.sourceId.substring(0, 8) + '...',
+      score: r.score.toFixed(3),
+      preview: r.content.substring(0, 80).replace(/\n/g, ' ') + '...',
+      vectorSim: r.details.embedSim?.toFixed(3),
+      kwRank: r.details.kwRank?.toFixed(3)
+    })),
+    elapsedMs
+  });
+
+  if (finalResults.length === 0) {
+    console.warn('[retrieve] ⚠️ NO RESULTS FOUND - Possible issues:', {
+      agentId,
+      query,
+      checklist: [
+        '1. Is agentId correct and matching DB?',
+        '2. Are there chunks in kb_chunks for this agent?',
+        '3. Do chunks have embeddings?',
+        '4. Is the query too specific or using different terminology?'
+      ]
+    });
+  }
+
+  return finalResults;
 }

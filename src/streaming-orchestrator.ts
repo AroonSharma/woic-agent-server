@@ -8,6 +8,7 @@ import { DeepgramManager } from './deepgram-manager';
 import { streamElevenLabsTTS } from './elevenlabs';
 import { conversationMemory } from './conversation-memory';
 import { IntentAnalyzer } from './intent-analyzer';
+import { SentenceDetector } from './utils/sentence-detector';
 import OpenAI from 'openai';
 
 export interface StreamingConfig {
@@ -53,6 +54,7 @@ export class StreamingOrchestrator {
   private config: StreamingConfig;
   private deepgramManager: DeepgramManager;
   private intentAnalyzer: IntentAnalyzer;
+  private sentenceDetector: SentenceDetector;
   private openaiClient: OpenAI;
   
   // Current turn state
@@ -85,11 +87,11 @@ export class StreamingOrchestrator {
       enableParallelStreaming: true,
       enableSpeculativeExecution: true,
       enableFirstTokenOptimization: true,
-      interimConfidenceThreshold: 0.85,
-      maxWaitForFinal: 1000,
-      llmStreamingDelay: 50,     // Reduced from 200ms per AMP analysis
-      ttsStreamingDelay: 20,     // Reduced from 100ms per AMP analysis
-      bargeInThreshold: 2,       // Reduced threshold for faster interruption
+      interimConfidenceThreshold: 0.75, // Increased from 0.85 for stricter control
+      maxWaitForFinal: 1500,             // Increased to allow more complete sentences
+      llmStreamingDelay: 150,            // Increased from 50ms to prevent premature starts
+      ttsStreamingDelay: 20,             // Keep TTS delay low for responsiveness
+      bargeInThreshold: 3,               // Increased from 2 words for better barge-in detection
       turnTakingEnabled: true,
       ...config
     };
@@ -97,6 +99,7 @@ export class StreamingOrchestrator {
     this.openaiClient = openaiClient;
     this.deepgramManager = new DeepgramManager();
     this.intentAnalyzer = new IntentAnalyzer();
+    this.sentenceDetector = new SentenceDetector();
   }
 
   /**
@@ -146,17 +149,17 @@ export class StreamingOrchestrator {
       onError: (error: any) => console.error('[Orchestrator] STT error:', error)
     };
     
-    // Use optimized Deepgram settings for low latency
+    // Use balanced Deepgram settings optimized for complete sentence detection
     this.deepgramManager.createConnection(
       { encoding, sampleRate, channels: 1 },
       callbacks,
       { 
-        // Override with faster settings
+        // Balanced settings to prevent premature STT finals while maintaining responsiveness
         endpointing: {
-          waitSeconds: 0.3,      // 300ms instead of 800ms
-          punctuationSeconds: 0.05,
-          noPunctSeconds: 0.5,   // 500ms instead of 1.5s
-          numberSeconds: 0.2,
+          waitSeconds: 0.8,      // Increased from 300ms to allow complete sentences
+          punctuationSeconds: 0.2, // Increased from 0.05 to avoid cutting off at commas
+          noPunctSeconds: 1.0,   // Increased from 500ms for natural speech patterns
+          numberSeconds: 0.5,    // Increased to handle number sequences
           smartEndpointing: true
         }
       }
@@ -177,21 +180,38 @@ export class StreamingOrchestrator {
     this.interimTranscript = transcript;
     this.callbacks.onSttPartial?.(transcript);
     
-    // Start LLM speculatively on high-confidence interim
+    // Start LLM speculatively on high-confidence interim with better sentence detection
     if (this.config.enableParallelStreaming && 
         !this.currentTurn.llmStarted &&
-        transcript.length > 10) {
+        transcript.length > 15) { // Increased minimum length to prevent very early triggers
       
-      // Calculate confidence based on transcript stability
+      // Use sophisticated sentence analysis
+      const analysis = this.sentenceDetector.analyzeSentence(transcript);
       const confidence = this.calculateTranscriptConfidence(transcript);
       
-      if (confidence >= this.config.interimConfidenceThreshold) {
-        console.log('[Orchestrator] Starting speculative LLM on interim:', transcript);
+      // Only start LLM if sentence analysis suggests it's safe to proceed
+      if (confidence >= this.config.interimConfidenceThreshold && 
+          (analysis.suggestion === 'process' || analysis.isComplete)) {
+        console.log('[Orchestrator] Starting speculative LLM on complete interim:', {
+          transcript,
+          confidence,
+          analysis: analysis.suggestion,
+          reasons: analysis.reasons
+        });
+        
         setTimeout(() => {
           if (!this.currentTurn?.sttCompleted) {
             this.startLLMStreaming(transcript, 'interim');
           }
         }, this.config.llmStreamingDelay);
+      } else {
+        console.log('[Orchestrator] Skipping interim LLM start:', {
+          transcript,
+          confidence,
+          threshold: this.config.interimConfidenceThreshold,
+          analysis: analysis.suggestion,
+          reasons: analysis.reasons
+        });
       }
     }
   }
@@ -384,25 +404,37 @@ export class StreamingOrchestrator {
   }
 
   /**
-   * Calculate transcript confidence
+   * Calculate transcript confidence using sophisticated sentence analysis
    */
   private calculateTranscriptConfidence(transcript: string): number {
-    // Simple heuristic based on transcript characteristics
-    let confidence = 0.5;
+    // Use the SentenceDetector for sophisticated analysis
+    const analysis = this.sentenceDetector.analyzeSentence(transcript);
     
-    // Longer transcripts are more stable
-    if (transcript.length > 20) confidence += 0.2;
-    if (transcript.length > 50) confidence += 0.1;
+    // Convert confidence percentage (0-100) to decimal (0-1)
+    let confidence = analysis.confidence / 100;
     
-    // Complete sentences are more confident
-    if (/[.!?]$/.test(transcript)) confidence += 0.2;
-    
-    // Multiple words indicate stability
+    // Apply additional stability heuristics for streaming context
     const wordCount = transcript.split(/\s+/).length;
-    if (wordCount > 3) confidence += 0.1;
-    if (wordCount > 5) confidence += 0.1;
     
-    return Math.min(confidence, 1.0);
+    // Penalize very short transcripts more heavily in streaming context
+    if (wordCount < 3) confidence *= 0.5;
+    else if (wordCount < 5) confidence *= 0.8;
+    
+    // Boost confidence for clearly complete sentences
+    if (analysis.isComplete && analysis.confidence >= 75) {
+      confidence = Math.min(confidence + 0.1, 1.0);
+    }
+    
+    // Log analysis for debugging
+    console.log('[Orchestrator] Sentence analysis:', {
+      transcript: transcript,
+      confidence: confidence,
+      isComplete: analysis.isComplete,
+      reasons: analysis.reasons,
+      suggestion: analysis.suggestion
+    });
+    
+    return Math.max(0, Math.min(confidence, 1.0));
   }
 
   /**

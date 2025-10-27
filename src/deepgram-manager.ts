@@ -1,6 +1,7 @@
 import { WebSocket } from 'ws';
 import * as dns from 'dns';
 import { getDeepgramConfig, STT_SILENCE_TIMEOUT_MS, LOG_LEVEL } from './agent-config';
+import { SentenceDetector } from './utils/sentence-detector';
 
 const isDebug = LOG_LEVEL === 'debug';
 const dbg = (...args: unknown[]) => { if (isDebug) { try { console.log(...args); } catch (e: unknown) {
@@ -21,6 +22,8 @@ export interface DeepgramCallbacks {
   onSttPartial: (transcript: string) => void;
   onSttFinal: (transcript: string) => void;
   onError: (error: any) => void;
+  onReady?: (info: { connectLatencyMs: number; queueSize: number }) => void;
+  onStateChange?: (state: 'connecting' | 'open' | 'closing' | 'closed' | 'reconnecting') => void;
 }
 
 export class DeepgramManager {
@@ -35,6 +38,19 @@ export class DeepgramManager {
   // De-duplication state for finals to avoid repeated turns
   private lastEmittedFinalNorm: string | null = null;
   private lastEmittedFinalAt: number = 0;
+  // Partial throttling to reduce UI spam
+  private lastPartialEmitAt: number = 0;
+  private lastPartialNorm: string | null = null;
+  // Connection health/metrics
+  private connectStartTs: number = 0;
+  private readyTs: number = 0;
+  private readinessWatchdog: NodeJS.Timeout | null = null;
+  private attemptedWatchdogReconnect: boolean = false;
+  // Audio activity tracking to avoid reconnect loops when idle
+  private hasEverSentAudio: boolean = false;
+  private lastAudioSentAt: number = 0;
+  // Intelligent sentence analysis
+  private sentenceDetector = new SentenceDetector();
 
   constructor() {}
 
@@ -42,12 +58,13 @@ export class DeepgramManager {
     // Override with optimized settings for low latency
     const rawUem = this.sessionContext?.endpointing?.noPunctSeconds 
       ? Math.round(this.sessionContext.endpointing.noPunctSeconds * 1000)
-      : 800;  // default
-    const utteranceEndMs = Math.max(1000, rawUem);
+      : 1200;  // safer default for no-punct endpointing
+    // Slightly more conservative to avoid mid-utterance cuts
+    const utteranceEndMs = Math.max(1200, rawUem);
     
     const rawEp = this.sessionContext?.endpointing?.waitSeconds
       ? Math.round(this.sessionContext.endpointing.waitSeconds * 1000)
-      : 300;  // default
+      : 300;  // safer default to avoid eager finals
     const endpointingMs = Math.max(300, rawEp);
     
     const params = new URLSearchParams({
@@ -94,10 +111,17 @@ export class DeepgramManager {
 
     this.callbacks = callbacks;
     this.sessionContext = sessionContext;
+    this.connectStartTs = Date.now();
+    this.readyTs = 0;
+    this.attemptedWatchdogReconnect = false;
+    this.hasEverSentAudio = false;
+    this.lastAudioSentAt = 0;
 
     dbg('[deepgram] Creating new Deepgram connection...');
     
     const { apiKey: key } = getDeepgramConfig();
+
+    console.log('[deepgram] DEBUG: API key loaded:', key ? `${key.slice(0, 10)}...` : 'MISSING');
 
     const url = this.buildWebSocketUrl(opts);
     dbg('[deepgram] Creating WebSocket with URL:', url);
@@ -113,8 +137,10 @@ export class DeepgramManager {
     this.ws = new WebSocket(url, {
       headers: { Authorization: `Token ${key}` },
       perMessageDeflate: false,
-      handshakeTimeout: 10000,
+      // Slightly lower timeout to fail fast on slow handshakes without impacting stability
+      handshakeTimeout: 1500,
     });
+    try { this.callbacks?.onStateChange?.('connecting'); } catch {}
     
     dbg('[deepgram] 🔧 WebSocket created, initial readyState:', this.ws.readyState);
 
@@ -186,14 +212,33 @@ export class DeepgramManager {
       this.clearConnectionTimeout();
       this.markReady();
       dbg('[deepgram] ✅ markReady() called, ready status:', this.ready);
+      try { this.callbacks?.onStateChange?.('open'); } catch {}
       
-      // Race condition safeguard
+      // Race condition safeguard - reduced timeout for faster readiness
       setTimeout(() => {
         if (this.ws && this.ws.readyState === WebSocket.OPEN && !this.ready) {
           dbg('[deepgram] ⚠️ Race condition detected; enabling and flushing queue.');
           this.markReady();
         }
-      }, 100);
+      }, 25);  // Reduced from 50ms to 25ms for faster activation
+
+      // Lightweight keepalive to maintain warm connection during idle gaps
+      try {
+        if (this.ws && typeof (this.ws as any).ping === 'function') {
+          const ka = setInterval(() => {
+            try {
+              if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+                clearInterval(ka);
+                return;
+              }
+              // Send ping frame; ignored if not supported by upstream
+              (this.ws as any).ping();
+            } catch {
+              clearInterval(ka);
+            }
+          }, 15000);
+        }
+      } catch { /* noop keepalive */ }
     });
 
     this.ws.on('message', (data: any) => {
@@ -227,13 +272,20 @@ export class DeepgramManager {
             console.log('[deepgram] Session ended, not reconnecting to prevent API credit drain');
             return;
           }
+
+          // Avoid reconnect loops when no mic audio has been sent yet
+          if (!this.hasEverSentAudio) {
+            console.log('[deepgram] No audio sent yet; will not reconnect until audio arrives');
+            return;
+          }
           
           let attempts = 0;
           const attemptReconnect = () => {
-            const base = 300; // ms
-            const delay = Math.min(5000, base * Math.pow(2, attempts)) + Math.floor(Math.random() * 200);
+            const base = 200; // ms, slightly faster base to reduce wait
+            const delay = Math.min(4000, base * Math.pow(2, attempts)) + Math.floor(Math.random() * 100);
             attempts = Math.min(attempts + 1, 6);
             dbg('[deepgram] Reconnecting in', delay, 'ms');
+            try { this.callbacks?.onStateChange?.('reconnecting'); } catch {}
             setTimeout(() => {
               try {
                 // Check environment flags for reconnect behavior
@@ -266,7 +318,9 @@ export class DeepgramManager {
       const isFinal: boolean = Boolean(msg?.is_final);
       const speechFinal: boolean = Boolean(msg?.speech_final);
       
-      console.log('[deepgram] Parsed transcript:', JSON.stringify(transcript), 'isFinal:', isFinal, 'speechFinal:', speechFinal);
+      const timestamp = Date.now();
+      const timestampStr = new Date().toISOString().split('T')[1].slice(0, -1); // HH:MM:SS.mmm
+      console.log(`[deepgram] [${timestampStr}] Parsed transcript:`, JSON.stringify(transcript), 'isFinal:', isFinal, 'speechFinal:', speechFinal, `timestamp: ${timestamp}`);
       
       // Enhanced logging for debugging accuracy issues
       if (msg?.channel?.alternatives?.[0]) {
@@ -298,9 +352,20 @@ export class DeepgramManager {
         dbg('[deepgram] Sending STT final:', transcript);
         this.callbacks?.onSttFinal(transcript);
       } else {
-        dbg('[deepgram] Sending STT partial:', transcript);
-        this.callbacks?.onSttPartial(transcript);
-        
+        // Throttle and de-duplicate partial emissions to reduce UI flicker
+        const nowMs = Date.now();
+        const norm = this.normalize(transcript);
+        const changed = norm && norm !== this.lastPartialNorm;
+        const intervalOk = nowMs - this.lastPartialEmitAt >= 80; // ~12.5 fps
+        if (changed && intervalOk) {
+          this.lastPartialNorm = norm;
+          this.lastPartialEmitAt = nowMs;
+          dbg('[deepgram] Sending STT partial:', transcript);
+          this.callbacks?.onSttPartial(transcript);
+        } else {
+          dbg('[deepgram] Suppressing redundant/rapid partial');
+        }
+
         // Setup timeout to promote partial to final if needed
         this.setupSttSilenceTimer(transcript);
       }
@@ -312,26 +377,97 @@ export class DeepgramManager {
   private setupSttSilenceTimer(transcript: string): void {
     this.clearSttSilenceTimer();
     
-    // Use faster timeout for better responsiveness
-    const ep = this.sessionContext?.endpointing || { noPunctSeconds: 1.2 };  // 1.2s default to reduce premature finals
-    const delayMs = Math.round(((ep.noPunctSeconds ?? 1.2) as number) * 1000);
+    // Base delay derived from endpointing; prefer conservative default
+    const ep = this.sessionContext?.endpointing || { noPunctSeconds: 1.2 };
+    let delayMs = Math.round(((ep.noPunctSeconds ?? 1.2) as number) * 1000);
+
+    // Enhanced strategy: Use intelligent analysis first, then apply heuristics
+    let shouldPromoteToFinal = false;
+    let analysisConfidence = 0;
+
+    try {
+      const analysis = this.sentenceDetector.analyzeSentence(String(transcript || ''), delayMs);
+      analysisConfidence = analysis.confidence;
+      
+      // STRATEGY 1: Only delay for very obvious incomplete sentences
+      if (analysis.suggestion === 'wait_longer' && analysis.confidence < 40) {
+        delayMs = Math.min(delayMs * 1.8, STT_SILENCE_TIMEOUT_MS); // More moderate extension
+        dbg('[deepgram] Very high confidence incomplete - extending timeout to', delayMs, 'ms');
+      }
+      // STRATEGY 2: Quick promotion for moderately confident complete sentences  
+      else if (analysis.suggestion === 'process' && analysis.confidence >= 75) { // Reduced from 85
+        delayMs = Math.max(600, delayMs * 0.8); // Faster processing
+        shouldPromoteToFinal = true;
+        dbg('[deepgram] High confidence complete - reducing timeout to', delayMs, 'ms');
+      }
+      // STRATEGY 3: Moderate wait for uncertain partials
+      else if (analysis.confidence < 60) { // Reduced from 70
+        delayMs = Math.min(delayMs + 800, STT_SILENCE_TIMEOUT_MS); // Reduced extension
+        dbg('[deepgram] Mid-confidence partial - moderate extension to', delayMs, 'ms');
+      }
+    } catch {}
+
+    // If partial ends with a common mid-clause token, give more time (enhanced patterns)
+    try {
+      const words = String(transcript).toLowerCase().trim().split(/\s+/);
+      const lastWord = words[words.length - 1];
+      const lastTwoWords = words.slice(-2).join(' ');
+      
+      // Enhanced mid-clause detection with more patterns
+      const midClausePatterns = [
+        /(and|or|but|so|because|while|when|if|although|however|therefore)$/,
+        /(the|a|an|this|that|these|those|my|your|his|her|our|their)$/,
+        /(want to|need to|going to|have to|used to|able to|trying to)$/,
+        /(i'm|i'll|i'd|you're|you'll|you'd|we're|we'll|we'd)$/,
+        /(with|from|into|onto|about|during|before|after|under|over)$/
+      ];
+      
+      const isIncompletePattern = midClausePatterns.some(pattern => 
+        pattern.test(lastWord) || pattern.test(lastTwoWords)
+      );
+      
+      if (isIncompletePattern && analysisConfidence < 70) { // Reduced threshold
+        delayMs = Math.min(delayMs + 1000, STT_SILENCE_TIMEOUT_MS); // Reduced extension
+        dbg('[deepgram] Enhanced mid-clause detection - extending to', delayMs, 'ms');
+      }
+    } catch {}
+    
+    // STRATEGY 4: Balanced minimum timeout - faster but safe
+    delayMs = Math.max(delayMs, 1400); // Reduced from 1800ms to 1400ms
     
     this.sttSilenceTimer = setTimeout(() => {
       try {
-        console.log('[deepgram] STT timeout: promoting partial to final after', delayMs, 'ms');
-        const norm = this.normalize(transcript);
-        const now = Date.now();
-        if (norm && this.lastEmittedFinalNorm === norm && now - this.lastEmittedFinalAt < 3000) {
-          dbg('[deepgram] Suppressing timeout-promoted duplicate final within 3s');
+        // Final check before promotion: re-analyze with current silence duration
+        let shouldEmitFinal = shouldPromoteToFinal;
+        
+        try {
+          const finalAnalysis = this.sentenceDetector.analyzeSentence(String(transcript || ''), delayMs);
+          if (finalAnalysis.suggestion === 'wait_longer' && finalAnalysis.confidence < 60) {
+            dbg('[deepgram] Final analysis still suggests incomplete - suppressing promotion');
+            shouldEmitFinal = false;
+          } else {
+            shouldEmitFinal = true;
+          }
+        } catch {}
+        
+        if (shouldEmitFinal) {
+          console.log('[deepgram] STT timeout: promoting partial to final after', delayMs, 'ms (confidence:', analysisConfidence, ')');
+          const norm = this.normalize(transcript);
+          const now = Date.now();
+          if (norm && this.lastEmittedFinalNorm === norm && now - this.lastEmittedFinalAt < 3000) {
+            dbg('[deepgram] Suppressing timeout-promoted duplicate final within 3s');
+          } else {
+            this.lastEmittedFinalNorm = norm;
+            this.lastEmittedFinalAt = now;
+            this.callbacks?.onSttFinal(transcript);
+          }
         } else {
-          this.lastEmittedFinalNorm = norm;
-          this.lastEmittedFinalAt = now;
-          this.callbacks?.onSttFinal(transcript);
+          dbg('[deepgram] Suppressing promotion of likely incomplete sentence:', transcript);
         }
       } finally {
         this.clearSttSilenceTimer();
       }
-    }, Math.min(delayMs, 1500));  // Allow up to 1.5s before promoting
+    }, Math.min(delayMs, STT_SILENCE_TIMEOUT_MS));  // Cap to configured silence timeout
   }
 
   private normalize(text: string): string {
@@ -347,7 +483,7 @@ export class DeepgramManager {
 
   private setupConnectionTimeout(opts: DeepgramConnectionOptions): void {
     this.connectionTimeout = setTimeout(() => {
-      console.error('[deepgram] 🚨 TIMEOUT: WebSocket failed to connect within 3 seconds');
+      console.error('[deepgram] 🚨 TIMEOUT: WebSocket failed to connect within 1 second');
       console.error('[deepgram] 🚨 WebSocket readyState:', this.ws?.readyState, '(0=CONNECTING, 1=OPEN, 2=CLOSING, 3=CLOSED)');
       console.error('[deepgram] 🚨 WebSocket URL:', this.ws?.url);
       console.error('[deepgram] 🚨 Queue size:', this.queue.length);
@@ -377,7 +513,13 @@ export class DeepgramManager {
       this.clearConnectionTimeout();
       this.clearStateInterval();
       this.ready = true;
+      this.readyTs = Date.now();
       dbg('[deepgram] ✅ Marked ready! Flushing', this.queue.length, 'queued chunks');
+      // Emit readiness metric
+      try {
+        const connectLatencyMs = Math.max(0, this.readyTs - this.connectStartTs);
+        this.callbacks?.onReady?.({ connectLatencyMs, queueSize: this.queue.length });
+      } catch {}
       
       // Send a test message to trigger a response for debugging
       try {
@@ -424,6 +566,7 @@ export class DeepgramManager {
     }
   }
 
+
   private cleanup(): void {
     this.ws = null;
     this.ready = false;
@@ -431,6 +574,8 @@ export class DeepgramManager {
     this.clearConnectionTimeout();
     this.clearStateInterval();
     this.clearSttSilenceTimer();
+    if (this.readinessWatchdog) { clearTimeout(this.readinessWatchdog); this.readinessWatchdog = null; }
+    this.attemptedWatchdogReconnect = false;
   }
 
   sendAudio(payload: Buffer, codec: 'pcm16' | 'opus' = 'pcm16'): boolean {
@@ -448,6 +593,8 @@ export class DeepgramManager {
         }
         
         this.ws.send(payload);
+        this.hasEverSentAudio = true;
+        this.lastAudioSentAt = Date.now();
         dbg('[deepgram] ✅ Sent audio payload:', payload.length, 'bytes');
         return true;
       } catch (e) {
@@ -474,17 +621,23 @@ export class DeepgramManager {
   }
 
   private queueAudio(payload: Buffer): void {
-    // Limit queue size
-    if (this.queue.length < 100) {
+    // More aggressive queue management to prevent delays
+    const maxQueueSize = 20; // Reduced from 100 to prevent delays
+    
+    if (this.queue.length < maxQueueSize) {
       this.queue.push(payload);
     } else {
-      console.log('[deepgram] Queue full, dropping oldest audio chunk');
-      this.queue.shift();
+      // Drop multiple old chunks if queue is backing up
+      const dropCount = Math.min(5, this.queue.length - 10);
+      for (let i = 0; i < dropCount; i++) {
+        this.queue.shift();
+      }
       this.queue.push(payload);
+      console.log(`[deepgram] Queue management: dropped ${dropCount} old chunks, size now:`, this.queue.length);
     }
 
-    // Auto-reconnect if queue is getting large
-    if (this.queue.length > 50 && !this.ws && this.callbacks) {
+    // Auto-reconnect if queue is getting large (adjusted for new max size)
+    if (this.queue.length > 15 && !this.ws && this.callbacks) {
       console.log('[deepgram] Large queue detected, attempting reconnection...');
       try {
         this.createConnection(
@@ -495,6 +648,31 @@ export class DeepgramManager {
       } catch (e) {
         console.log('[deepgram] Auto-reconnection failed:', e);
       }
+    }
+
+    // Readiness watchdog: if not ready soon while audio queues, preemptively restart once
+    if (!this.ready && this.ws && !this.readinessWatchdog && !this.attemptedWatchdogReconnect) {
+      this.readinessWatchdog = setTimeout(() => {
+        this.readinessWatchdog = null;
+        try {
+          const elapsed = Date.now() - this.connectStartTs;
+          if (!this.ready && this.ws && this.ws.readyState === WebSocket.OPEN && elapsed >= 700 && this.queue.length >= 10) {
+            console.warn('[deepgram] ⚠️ Not ready after', elapsed, 'ms with', this.queue.length, 'queued chunks. Restarting stream...');
+            this.attemptedWatchdogReconnect = true;
+            try { this.ws.terminate(); } catch {}
+            this.cleanup();
+            if (this.callbacks && this.sessionContext && process.env.DEEPGRAM_AUTO_RECONNECT !== 'false') {
+              this.createConnection(
+                { encoding: 'linear16', sampleRate: 16000, channels: 1 },
+                this.callbacks,
+                this.sessionContext
+              );
+            }
+          }
+        } catch (e) {
+          console.log('[deepgram] Readiness watchdog error:', e);
+        }
+      }, 700);
     }
   }
 

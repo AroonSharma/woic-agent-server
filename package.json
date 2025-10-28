@@ -2,10 +2,10 @@
   "name": "woic-agent-server",
   "version": "1.0.0",
   "description": "Voice WebSocket agent server - 100% working copy from local",
-  "main": "dist/agent-server.js",
+  "main": "dist/src/agent-server.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/agent-server.js",
+    "start": "node dist/src/agent-server.js",
     "dev": "ts-node -r tsconfig-paths/register src/agent-server.ts",
     "test": "echo \"No tests yet\""
   },

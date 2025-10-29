@@ -343,16 +343,18 @@ wss.on('connection', async (ws, req) => {
   
   try {
     const origin = (req?.headers?.origin as string) || '';
+    const userAgent = req?.headers?.['user-agent'] || 'unknown';
+    const ip = req?.socket?.remoteAddress || 'unknown';
     const isLocalOrigin = /^http:\/\/localhost:\d+$/i.test(origin);
     const isAllowed = allowedOrigins.includes(origin) || (process.env.NODE_ENV !== 'production' && isLocalOrigin);
     if (origin && !isAllowed) {
-      console.log('[agent] Closing WS: disallowed origin', origin, 'allowed:', allowedOrigins);
+      console.error('[agent] Connection rejected - disallowed origin:', { origin, ip, userAgent, allowedOrigins });
       try { ws.close(1008, 'origin not allowed'); } catch (e: unknown) {
         console.error('[agent] Failed to close WS for disallowed origin:', e instanceof Error ? e.message : String(e));
       }
       return;
     }
-    
+
     // Optional: require bearer token if configured
     const expectedToken = process.env.AGENT_WS_TOKEN;
     if (expectedToken) {
@@ -367,7 +369,7 @@ wss.on('connection', async (ws, req) => {
       }
       const provided = headerToken || queryToken;
       if (provided !== expectedToken) {
-        console.log('[agent] Closing WS: invalid/missing token');
+        console.error('[agent] Connection rejected - invalid/missing token:', { ip, origin, hasHeaderToken: !!headerToken, hasQueryToken: !!queryToken });
         try { ws.close(1008, 'auth required'); } catch (e: unknown) {
           console.error('[agent] Failed to close WS for auth required:', e instanceof Error ? e.message : String(e));
         }
@@ -382,10 +384,10 @@ wss.on('connection', async (ws, req) => {
       ip: req?.socket?.remoteAddress || 'unknown',
       connectedAt: Date.now()
     };
-    
+
     connectionId = connectionPool.addConnection(ws, metadata);
     if (!connectionId) {
-      console.log('[agent] Connection rejected by pool (rate limit or capacity)');
+      console.error('[agent] Connection rejected by pool - rate limit or capacity exceeded:', { ip, origin, userAgent, poolStatus: connectionPool.getStats() });
       try { ws.close(1013, 'server overloaded'); } catch (e: unknown) {
         console.error('[agent] Failed to close WS for pool rejection:', e instanceof Error ? e.message : String(e));
       }
